@@ -1,0 +1,38 @@
+{
+  "name": "zuspy",
+  "version": "1.0.0",
+  "description": "Spy on your local competitors: who beats you on Google Maps, every ad they're running on Facebook, Instagram and Google right now, what their customers complain about, and the ads and offers that win those customers. Then keep watching them. Bring your own API keys, or run it inside Claude Code.",
+  "type": "module",
+  "bin": {
+    "zuspy": "bin/zuspy.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "doctor": "node bin/zuspy.mjs doctor"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0"
+  },
+  "keywords": [
+    "competitor-analysis",
+    "competitor-spy",
+    "ad-spy",
+    "facebook-ad-library",
+    "google-ads-transparency",
+    "local-seo",
+    "google-maps",
+    "reviews",
+    "marketing",
+    "claude-code"
+  ],
+  "author": "Zuops (https://zuops.com)",
+  "license": "MIT",
+  "homepage": "https://github.com/zutrue/zuspy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zutrue/zuspy"
+  }
+}

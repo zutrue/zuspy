@@ -1,0 +1,14 @@
+{
+  "name": "zuspy",
+  "version": "1.0.0",
+  "description": "Spy on your local competitors: their ads on Facebook, Instagram and Google, what their customers complain about, and the ads and offers that win those customers. Then keep watching them.",
+  "author": {
+    "name": "Zuops",
+    "url": "https://zuops.com"
+  },
+  "homepage": "https://github.com/zutrue/zuspy",
+  "repository": "https://github.com/zutrue/zuspy",
+  "license": "MIT",
+  "keywords": ["competitor-analysis", "ad-spy", "facebook-ad-library", "google-ads-transparency", "local-marketing"],
+  "skills": ["./.claude/skills/"]
+}

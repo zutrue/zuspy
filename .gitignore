@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.*
+!.env.example
+zuspy-reports/
+*.log
+.DS_Store

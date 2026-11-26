@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node bin/zuspy.mjs help)",
+      "Bash(node bin/zuspy.mjs doctor)",
+      "Bash(node bin/zuspy.mjs list)",
+      "Bash(node bin/zuspy.mjs setup)",
+      "Bash(node bin/zuspy.mjs setup:*)",
+      "Bash(node bin/zuspy.mjs open:*)",
+      "Bash(node bin/zuspy.mjs finish:*)",
+      "Bash(node bin/zuspy.mjs rebuild:*)",
+      "Bash(npm test)",
+      "Bash(npm install)"
+    ]
+  }
+}

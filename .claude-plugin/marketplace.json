@@ -1,0 +1,11 @@
+{
+  "name": "zuspy",
+  "owner": { "name": "Zuops", "url": "https://github.com/zutrue" },
+  "plugins": [
+    {
+      "name": "zuspy",
+      "source": ".",
+      "description": "Spy on your local competitors' ads and reviews, and get the ads and offers that win their customers."
+    }
+  ]
+}
