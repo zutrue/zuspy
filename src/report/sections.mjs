@@ -5,6 +5,8 @@ import { CHANNELS, marketLines } from "../rules/scorecard.mjs";
 import { FOLLOW_UP, SOCIAL_LABEL, undouble } from "../rules/site.mjs";
 import { TOOL_GROUP_LABEL } from "../rules/watch.mjs";
 import { esc, heading, plural, safeUrl } from "./html-kit.mjs";
+import { avatar } from "./ui.mjs";
+import { isBadge } from "../rules/google-top.mjs";
 
 const num = (n) => Number(n).toLocaleString("en-US");
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "");
@@ -22,7 +24,7 @@ export function refChip(ref, { ads, byId }) {
   const ad = ads.find((a) => a.id === ref);
   if (ad) return `<a class="ref" href="#ads" data-show="${esc(ad.id)}">${esc(ad.channel === "meta" ? "Their Facebook ad" : "Their Google ad")}${ad.days ? ` · ${num(ad.days)} days` : ""}</a>`;
   const r = byId.get(ref);
-  if (r) return `<a class="ref" href="#site-${esc(r.id)}">#${esc(r.rank)} ${esc(r.name)}</a>`;
+  if (r) return `<a class="ref who" href="#comp-${esc(r.id)}">${avatar(r, "xs")}<span>${esc(r.name)}</span></a>`;
   if (ref === "lsa") return `<a class="ref" href="#top">Top of Google</a>`;
   return "";
 }
@@ -51,7 +53,7 @@ export function changesSection(res, ctx) {
     .sort(([a], [b]) => (ctx.byId.get(a)?.rank ?? 99) - (ctx.byId.get(b)?.rank ?? 99))
     .map(([id, list]) => {
       const r = ctx.byId.get(id);
-      return `<div class="chg-row"><div class="chg-who">${r ? `<span class="rank">${esc(r.rank)}</span><span>${esc(r.name)}</span>` : `<span>Out of the top</span>`}</div><ul>${list.map((c) => `<li>${esc(c.text)}${c.ad ? ` <a href="#ads" data-show="${esc(c.ad)}">See the newest →</a>` : ""}</li>`).join("")}</ul></div>`;
+      return `<div class="chg-row"><div class="chg-who">${r ? `${avatar(r, "md", { rank: r.rank })}<span>${esc(r.name)}</span>` : `<span class="out">Out of the top</span>`}</div><ul>${list.map((c) => `<li>${esc(c.text)}${c.ad ? ` <a href="#ads" data-show="${esc(c.ad)}">See the newest →</a>` : ""}</li>`).join("")}</ul></div>`;
     })
     .join("");
   const back = ch.folder && /^[A-Za-z0-9._-]+$/.test(ch.folder) ? ` <a href="../${esc(ch.folder)}/report.html">Open that report →</a>` : "";
@@ -79,7 +81,7 @@ export function scorecardSection(res, ctx) {
       const r = ctx.byId.get(row.id);
       if (!r) return "";
       return `<div class="sc-row">
-  <div class="sc-biz"><span class="rank">${esc(r.rank)}</span><div><a class="name" href="#site-${esc(r.id)}">${esc(r.name)}</a>${r.engine ? `<div class="eng">${esc(r.engine)}</div>` : ""}</div></div>
+  <div class="sc-biz">${avatar(r, "md", { rank: r.rank })}<div><a class="name" href="#comp-${esc(r.id)}">${esc(r.name)}</a>${r.engine ? `<div class="eng">${esc(r.engine)}</div>` : ""}</div></div>
   ${(() => {
     // A site that didn't open: one cell across its four columns, not four question marks.
     const closed = SITE.every((k) => row.cells[k]?.state === "unknown" && row.cells[k].text === row.cells.site.text) && !/robots/.test(row.cells.site.text);
@@ -117,10 +119,14 @@ export function topBlock(res, ctx, input) {
       const r = b.rival ? ctx.byId.get(b.rival) : null;
       return `<article class="lsa-card${r ? " is-rival" : ""}">
   <span class="pos">${esc(b.position)}</span>
-  <div class="nm">${esc(b.name)}</div>
+  <div class="nm">${r ? avatar(r, "sm") : avatar({ name: b.name }, "sm")}<span>${esc(b.name)}</span></div>
   <div class="meta">${b.rating != null ? `<span class="stars">★</span> ${esc(b.rating)}` : ""}${b.reviews != null ? ` · ${num(b.reviews)} reviews` : ""}${b.years ? ` · ${esc(b.years)}+ years` : ""}</div>
-  ${b.badges?.length ? `<div class="tags">${b.badges.map((x) => `<span class="tag plain">${esc(x)}</span>`).join("")}</div>` : ""}
-  <div class="who-tag">${r ? `<a href="#site-${esc(r.id)}">#${esc(r.rank)} on Google Maps</a>` : "Not in the Maps top"}</div>
+  ${(() => {
+    // Reports made before badges were told apart from a distance or an address get the same check here.
+    const badges = (b.badges ?? []).filter((x) => isBadge(x, input.location.split(",")[0]));
+    return badges.length ? `<div class="tags">${badges.map((x) => `<span class="tag plain">${esc(x)}</span>`).join("")}</div>` : "";
+  })()}
+  <div class="who-tag">${r ? `<a href="#comp-${esc(r.id)}">#${esc(r.rank)} on Google Maps →</a>` : "Not in the Maps top"}</div>
 </article>`;
     })
     .join("");
@@ -157,7 +163,7 @@ export function sitesSection(res, ctx) {
       const s = sites[r.id];
       const same = r.adFacts?.sameAs ? ctx.byId.get(r.adFacts.sameAs) : null;
       const url = safeUrl(r.website);
-      const head = `<div class="site-h"><span class="rank">${esc(r.rank)}</span><div><div class="name">${esc(r.name)}</div>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener nofollow">${esc(hostOf(url) ?? "website")}</a>` : `<span class="why">${s?.read ? "Website (link hidden)" : "No website on Google"}</span>`}</div></div>`;
+      const head = `<div class="site-h">${avatar(r, "md", { rank: r.rank })}<div><div class="name">${esc(r.name)}</div>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener nofollow">${esc(hostOf(url) ?? "website")}</a>` : `<span class="why">${s?.read ? "Website (link hidden)" : "No website on Google"}</span>`}</div></div>`;
       if (same) return `<article class="card site" id="site-${esc(r.id)}">${head}<p class="why">Same website as #${esc(same.rank)} ${esc(same.name)}: see that one.</p></article>`;
       if (!s?.read) return `<article class="card site" id="site-${esc(r.id)}">${head}<p class="why">${r.website ? "Its site didn't open for a reader this time (a bot check or a slow site), so what's on it is unknown." : "It has no website on its Google listing."}</p></article>`;
       const kv = [];
@@ -201,12 +207,13 @@ export function planSection(res, ctx) {
     .map((w) => {
       const steps = plan.filter((p) => p.week === w);
       if (!steps.length) return "";
-      return `<div class="week"><h3>Week ${w}</h3><ol>${steps.map((p) => `<li><p>${esc(p.step)}</p>${p.refs?.length ? `<div class="refs">${p.refs.map((r) => refChip(r, ctx)).join("")}</div>` : ""}</li>`).join("")}</ol></div>`;
+      return `<div class="week"><h3>Week ${w}</h3><ol>${steps.map((p) => `<li><label class="step"><input type="checkbox" data-step-box="${plan.indexOf(p)}"><span class="box" aria-hidden="true"></span><p>${esc(p.step)}</p></label>${p.refs?.length ? `<div class="refs">${p.refs.map((r) => refChip(r, ctx)).join("")}</div>` : ""}</li>`).join("")}</ol></div>`;
     })
     .join("");
   return `<section id="plan">
   ${heading("Your next 30 days", "plan")}
-  <p class="lead">Built on what this report found, quickest wins first. Each step links to what it builds on. Budgets and results aren't promised: nobody outside a company can see what ads cost or bring in.</p>
+  <p class="lead">Built on what this report found, quickest wins first. Each step links to what it builds on; tick it off when it's done (kept in this browser). Budgets and results aren't promised: nobody outside a company can see what ads cost or bring in.</p>
+  <div class="plan-bar"><span id="plan-done"></span></div>
   <div class="weeks">${weeks}</div>
 </section>`;
 }
@@ -232,8 +239,8 @@ export const SECTION_STYLES = `
 .chg{padding:6px 22px}
 .chg-row{display:grid;grid-template-columns:minmax(200px,280px) minmax(0,1fr);gap:18px;padding:14px 0;border-top:1px solid var(--line)}
 .chg-row:first-child{border-top:0}
-.chg-who{display:flex;align-items:center;gap:10px;font-weight:700}
-.chg-who .rank{width:28px;height:28px;font-size:13px;border-radius:9px}
+.chg-who{display:flex;align-items:center;gap:12px;font-weight:700}
+.chg-who .out{color:var(--muted)}
 .chg ul{margin:0;padding-left:18px;display:grid;gap:4px;color:var(--ink-2)}
 /* how each one gets customers */
 .mkt{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
@@ -244,7 +251,7 @@ export const SECTION_STYLES = `
 .sc-note{margin:10px 2px 0}
 .sc-row:first-child{border-top:0}
 .sc-head{background:#F7F9FC;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding-top:12px;padding-bottom:12px;align-items:end}
-.sc-biz{display:grid;grid-template-columns:34px 1fr;gap:12px}
+.sc-biz{display:grid;grid-template-columns:40px 1fr;gap:14px;align-items:start}
 .sc-biz .name{font-weight:700;font-size:15px;line-height:1.3;color:var(--ink)}
 .sc-biz .eng{font-size:13px;color:var(--ink-2);margin-top:4px;line-height:1.45}
 .sc-cell{display:flex;flex-direction:column;gap:5px;font-size:12.5px;line-height:1.35;color:var(--ink-2);min-width:0}
@@ -259,7 +266,7 @@ export const SECTION_STYLES = `
 .lsa-card{position:relative;background:#fff;border-radius:16px;box-shadow:var(--shadow);padding:16px 16px 14px 56px;display:flex;flex-direction:column;gap:6px}
 .lsa-card.is-rival{box-shadow:var(--shadow),inset 0 0 0 2px var(--blue-line)}
 .lsa-card .pos{position:absolute;left:16px;top:16px;display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:var(--blue-soft);color:var(--blue-ink);font-weight:800;font-size:13px}
-.lsa-card .nm{font-weight:700;line-height:1.3}
+.lsa-card .nm{display:flex;align-items:center;gap:9px;font-weight:700;line-height:1.3}
 .lsa-card .meta{font-size:13px;color:var(--muted)}
 .lsa-card .who-tag{font-size:12.5px;font-weight:600;color:var(--muted);margin-top:auto}
 .note{color:var(--ink-2);font-size:14.5px}
@@ -268,7 +275,7 @@ export const SECTION_STYLES = `
 /* their websites */
 .sites{grid-template-columns:repeat(auto-fill,minmax(440px,1fr));align-items:start}
 .site{scroll-margin-top:84px}
-.site-h{display:grid;grid-template-columns:34px 1fr;gap:12px;align-items:center;margin-bottom:12px}
+.site-h{display:grid;grid-template-columns:40px 1fr;gap:14px;align-items:center;margin-bottom:12px}
 .site-h .name{font-weight:700;font-size:16px;line-height:1.3}
 .site-h a{font-size:13px}
 .site dl{margin:0;display:grid}
@@ -292,8 +299,21 @@ a.tag:hover{text-decoration:none;background:var(--blue-soft);color:var(--blue-in
 .week{min-width:0}.week ol{min-width:0}
 .week li{background:#F7F9FC;border:1px solid var(--line);border-radius:14px;padding:12px 14px;min-width:0}
 .week li p{margin:0;font-weight:500;font-size:14.5px;line-height:1.45}
+.step{display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:start;cursor:pointer}
+.step input{position:absolute;opacity:0;pointer-events:none}
+.step .box{width:20px;height:20px;margin-top:1px;border-radius:6px;border:2px solid #C3CAD6;background:#fff;display:grid;place-items:center;transition:background .15s,border-color .15s}
+.step input:checked + .box{background:var(--green);border-color:var(--green)}
+.step input:checked + .box::after{content:"";width:6px;height:11px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:translate(0,-1px) rotate(45deg)}
+.step input:focus-visible + .box{outline:2px solid var(--blue);outline-offset:2px}
+.week li.done{background:var(--green-soft);border-color:#C8EBDB}
+.week li.done p{color:var(--muted);text-decoration:line-through;text-decoration-color:rgba(11,138,95,.5)}
+.week li .refs{margin-left:32px}
+.plan-bar{margin:-6px 0 14px;font-size:13.5px;font-weight:700;color:var(--green)}
 .refs{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .moves .refs{margin-top:6px}
+.ref.who{display:inline-flex;align-items:center;gap:6px;padding:2px 10px 2px 2px}
+.ref.who .av{border-radius:999px}.ref.who .av img{border-radius:999px}
+.ref.who span{overflow:hidden;text-overflow:ellipsis}
 .ref{font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px;background:var(--blue-soft);color:var(--blue-ink);white-space:nowrap;max-width:100%;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .ref:hover{text-decoration:none;background:var(--blue-line)}
 .more{margin:12px 0 0;font-weight:600}

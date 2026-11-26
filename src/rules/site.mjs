@@ -270,6 +270,38 @@ export function socialsIn(html) {
   return out;
 }
 
+/**
+ * Where a site keeps its logo, best for a small square picture first: its app icons (apple-touch-icon, sized icons),
+ * then the logo in its business markup (often a wide wordmark), then small icons. Absolute https/http addresses.
+ */
+export function logoLinks(html, base) {
+  const abs = (u) => {
+    try {
+      const x = new URL(String(u).replace(/&amp;/g, "&").replace(/\\\//g, "/").trim(), base);
+      return /^https?:$/.test(x.protocol) && !/\.svg(\?|$)/i.test(x.pathname) ? x.toString() : null;
+    } catch {
+      return null;
+    }
+  };
+  const found = [];
+  for (const m of String(html ?? "").matchAll(/<link\b[^>]*>/gi)) {
+    const tag = m[0];
+    const rel = (tag.match(/\brel=["']([^"']+)["']/i)?.[1] ?? "").toLowerCase();
+    const href = tag.match(/\bhref=["']([^"']+)["']/i)?.[1];
+    if (!href || !/icon/.test(rel)) continue;
+    const size = Number(tag.match(/\bsizes=["'](\d+)x\d+/i)?.[1] ?? 0);
+    const touch = rel.includes("apple-touch-icon");
+    found.push({ url: abs(href), rank: touch ? 1 : size >= 96 ? 2 : 5, size: size || (touch ? 180 : 16) });
+  }
+  for (const m of String(html ?? "").matchAll(/"logo"\s*:\s*(?:"([^"]+)"|\{[^{}]*?"(?:url|contentUrl)"\s*:\s*"([^"]+)")/g)) found.push({ url: abs(m[1] ?? m[2]), rank: 3, size: 0 });
+  const seen = new Set();
+  return found
+    .filter((f) => f.url && !seen.has(f.url) && seen.add(f.url))
+    .sort((a, b) => a.rank - b.rank || b.size - a.size)
+    .map((f) => f.url)
+    .slice(0, 6);
+}
+
 /** A "Book online" / "Schedule service" button: online booking without a known booking tool behind it. */
 export function bookingButton(html) {
   for (const m of String(html ?? "").matchAll(/<(a|button)\b[^>]*>([\s\S]{0,160}?)<\/\1>/gi)) {

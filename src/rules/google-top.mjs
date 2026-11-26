@@ -51,8 +51,20 @@ export function pointOf(rivals = []) {
   return { location_coordinate: `${lat.toFixed(4)},${lng.toFixed(4)},20000` };
 }
 
+/**
+ * A part of a listing's description that is a badge the business chose ("Free estimate", "On-time guarantee"), not its
+ * hours, the town it serves, how far away it is or its street address.
+ */
+export function isBadge(b, town = "") {
+  const t = String(b ?? "").trim();
+  if (!t || t.length > 40) return false;
+  if (/^(open|closed|opens|closes|serves)\b/i.test(t)) return false;
+  if (/^\d+(\.\d+)?\s*(mi|km|miles?)$/i.test(t) || /^\d+\s+\S/.test(t) || /\b(ave|st|blvd|rd|dr|ln|hwy|pkwy|ste|suite|unit)\b/i.test(t)) return false;
+  return !town || t.toLowerCase() !== String(town).trim().toLowerCase();
+}
+
 /** "17+ years in business\nOpen 24 hours · Serves Phoenix\n24/7 emergency services · Free estimate" -> its parts. */
-function lsaDetails(description) {
+function lsaDetails(description, town) {
   const bits = String(description ?? "")
     .split(/\n|·|⁦|⁩/)
     .map((s) => s.replace(/[⁦-⁩]/g, "").replace(/\s+/g, " ").trim())
@@ -62,14 +74,13 @@ function lsaDetails(description) {
   for (const b of bits) {
     const y = b.match(/^(\d+)\+?\s+years?\s+in\s+business$/i);
     if (y) years = Number(y[1]);
-    else if (/^open\b|^closed\b|^opens\b|^closes\b|^serves\b/i.test(b)) continue;
-    else if (b.length <= 40 && !badges.includes(b)) badges.push(b);
+    else if (isBadge(b, town) && !badges.includes(b)) badges.push(b);
   }
   return { years, badges: badges.slice(0, 4) };
 }
 
-/** What one search showed at the top: Local Services Ads and text ads. */
-export function topOfGoogle(items) {
+/** What one search showed at the top: Local Services Ads and text ads. `town` is the town searched in. */
+export function topOfGoogle(items, town = "") {
   const list = Array.isArray(items) ? items : [];
   const block = list.find((it) => it?.type === "local_services");
   const businesses = (block?.items ?? [])
@@ -79,7 +90,7 @@ export function topOfGoogle(items) {
       position: i + 1,
       rating: Number.isFinite(Number(e.rating?.value)) ? Number(e.rating.value) : null,
       reviews: Number.isFinite(Number(e.rating?.votes_count)) ? Number(e.rating.votes_count) : null,
-      ...lsaDetails(e.description),
+      ...lsaDetails(e.description, town),
     }))
     .slice(0, 12);
   const paid = list

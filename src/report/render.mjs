@@ -8,6 +8,7 @@ import { ZUOPS_URL } from "../config.mjs";
 import { CHANNELS } from "../rules/scorecard.mjs";
 import { SOCIAL_LABEL } from "../rules/site.mjs";
 import { changesSection, nextSteps, planSection, scorecardSection, SECTION_STYLES, sitesSection, topBlock, unknownsSection } from "./sections.mjs";
+import { avatar, hueOf, ICON, initials, platformMark, UI_STYLES } from "./ui.mjs";
 
 const LONG_DAYS = 60;
 const CHANNEL = { meta: "Facebook & Instagram", google: "Google" };
@@ -27,6 +28,12 @@ const GENERIC = new Set(
 );
 const PLACES = new Set(
   "alabama alaska arizona arkansas california colorado connecticut delaware florida georgia hawaii idaho illinois indiana iowa kansas kentucky louisiana maine maryland massachusetts michigan minnesota mississippi missouri montana nebraska nevada ohio oklahoma oregon pennsylvania tennessee texas utah vermont virginia washington wisconsin wyoming new north south east west san santa los las saint st fort mount lake"
+    .split(" "),
+);
+
+// Everyday words a business name may start with: as a name they're hidden only when written with their capital.
+const ORDINARY = new Set(
+  "time precision mighty golden brothers speed apex summit pioneer eagle liberty patriot titan legacy ace star sun sunrise sunset sunshine blue green red black white silver gold diamond crystal royal king queen prince knight hero champion victory first second third one two three city metro valley mountain river ocean coastal desert canyon mesa ridge peak pine oak cedar maple willow rock stone iron steel copper every true pure clear bright fresh clean modern classic old big little great good right left central western eastern northern southern tipping happy smart total complete advanced precise perfect absolute"
     .split(" "),
 );
 
@@ -70,8 +77,10 @@ export function anonymize(report) {
   swaps.sort((a, b) => b[0].length - a[0].length);
   const patterns = swaps.map(([from, to]) => {
     const body = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-    // One word ("Precision") only as that word, with its capital; a longer name in any case.
-    return [new RegExp(`(?<![A-Za-z0-9])${body}(?![A-Za-z0-9])`, /\s/.test(from) ? "gi" : "g"), to];
+    // A longer name in any case. One word in any case too ("anyone at applewood"), unless it's an everyday word
+    // ("Time", "Precision"): then only with its capital, so "on time" stays "on time".
+    const anyCase = /\s/.test(from) || !ORDINARY.has(from.toLowerCase());
+    return [new RegExp(`(?<![A-Za-z0-9])${body}(?![A-Za-z0-9])`, anyCase ? "gi" : "g"), to];
   });
   const clean = (s) => {
     if (typeof s !== "string") return s;
@@ -89,11 +98,14 @@ export function anonymize(report) {
     rv.name = names.get(rv.id);
     rv.website = null;
     rv.address = null;
+    // A logo names them as surely as their name: a letter instead. Their Maps photo stays, blurred like their ads.
+    rv.logo = null;
     if (rv.adFacts) rv.adFacts = { ...rv.adFacts, metaUrl: null, googleUrl: null };
   }
   for (const a of r.result.rivalAds ?? []) {
     if (a.rival !== MARKET) a.advertiser = names.get(a.rival) ?? a.advertiser;
     a.sourceUrl = null;
+    a.avatar = null;
     a.host = a.host ? "their-site.com" : null;
     a.link = null;
     a.youtubeId = null;
@@ -119,75 +131,89 @@ export function anonymize(report) {
 const daysBadge = (d) =>
   d == null ? "" : `<span class="badge${d >= LONG_DAYS ? " proven" : ""}">${d >= LONG_DAYS ? `${num(d)} days running` : d >= 1 ? `${num(d)} ${d === 1 ? "day" : "days"}` : "New today"}</span>`;
 
-/** One ad as a card: the picture (or its words), how long it has run, who runs it, its words and button. */
+const whoOf = (a, byId) => (a.rival === MARKET ? a.advertiser : byId.get(a.rival)?.name ?? a.advertiser);
+/** The picture an ad's card shows for whoever runs it: the competitor's logo, or another advertiser's page picture. */
+const faceOf = (a, byId) => (a.rival === MARKET ? { name: a.advertiser, logo: a.avatar } : byId.get(a.rival) ?? { name: a.advertiser });
+/** The words the search box looks through. */
+const searchText = (a, who) => [who, a.headline, a.body, a.cta, a.host].filter(Boolean).join(" ").replace(/\s+/g, " ").toLowerCase().slice(0, 800);
+
+/** One ad as a card: who runs it and where, the picture (or its words), how long it has run, its words and button. */
 export function adCard(a, rivalsById, n) {
   const img = safeUrl(a.image);
   const video = safeUrl(a.video);
-  const who = a.rival === MARKET ? a.advertiser : rivalsById.get(a.rival)?.name ?? a.advertiser;
+  const who = whoOf(a, rivalsById);
   // Google shows a search ad as a picture of the ad: shown whole, top first, on white.
   const shot = a.channel === "google" && a.kind !== "video";
   const isVideo = !!(video || a.youtubeId || a.kind === "video");
-  let media;
+  let media = "";
   if (img) media = `<img loading="lazy" src="${esc(img)}" alt="">`;
   else if (video) media = `<video preload="metadata" muted playsinline src="${esc(video)}#t=0.5"></video>`;
-  else media = "";
+  const badges = `<div class="badges">${daysBadge(a.days)}${a.versions > 1 ? `<span class="badge">${num(a.versions)} versions</span>` : ""}</div>`;
   const mediaBox = media
-    ? `<div class="media${shot ? " shot" : ""}">${media}<div class="badges">${daysBadge(a.days)}${a.versions > 1 ? `<span class="badge">${num(a.versions)} versions</span>` : ""}</div>${isVideo ? `<span class="badge play">▶ Video</span>` : ""}</div>`
-    : `<div class="media words"><div class="badges">${daysBadge(a.days)}</div><div class="hl">${esc(a.headline ?? "")}</div><div class="tx">${esc(a.body ?? "")}</div></div>`;
+    ? `<div class="media${shot ? " shot" : ""}">${media}${badges}${isVideo ? `<span class="badge play">${ICON.play}Video</span>` : ""}</div>`
+    : `<div class="media words">${badges}<div class="hl">${esc(a.headline ?? "")}</div><div class="tx">${esc(a.body ?? "")}</div></div>`;
   // A Meta headline is often just the page's name: shown once.
   const headline = a.headline && a.headline.trim().toLowerCase() !== String(who).trim().toLowerCase() ? a.headline : null;
   const words = media ? `${headline ? `<div class="hl">${esc(headline)}</div>` : ""}${a.body ? `<div class="tx">${esc(a.body)}</div>` : ""}` : "";
-  return `<article class="ad" tabindex="0" data-id="${esc(a.id)}" data-rival="${esc(a.rival)}" data-channel="${esc(a.channel)}" data-kind="${esc(kindOf(a))}" data-n="${n}">
+  const start = a.startedAt ? Date.parse(a.startedAt) || 0 : 0;
+  return `<article class="ad" tabindex="0" data-id="${esc(a.id)}" data-rival="${esc(a.rival)}" data-channel="${esc(a.channel)}" data-kind="${esc(kindOf(a))}" data-days="${esc(a.days ?? -1)}" data-start="${start}" data-versions="${esc(a.versions ?? 1)}" data-n="${n}" data-q="${esc(searchText(a, who))}">
+  <div class="ad-h">${avatar(faceOf(a, rivalsById), "sm")}<div class="ad-who"><span class="n" title="${esc(who)}">${esc(who)}</span><span class="s">${platformMark(a.channel)}${esc(a.channel === "meta" ? "Facebook" : "Google")}${a.startedAt ? ` · since ${esc(monthYear(a.startedAt))}` : ""}</span></div></div>
   ${mediaBox}
   <div class="body">
-    <div class="who"><span class="dot ${esc(a.channel)}"></span><span class="n" title="${esc(who)}">${esc(who)}</span></div>
     ${words}
-    <div class="foot">${a.cta ? `<span class="cta-chip">${esc(a.cta)}</span>` : `<span>${esc(KIND[a.kind] ?? a.kind)}${a.cards ? ` · ${num(a.cards)} cards` : ""}</span>`}<span class="host">${esc(a.channel === "meta" ? "Facebook & Instagram" : "Google")}</span></div>
+    <div class="foot">${a.cta ? `<span class="cta-chip">${esc(a.cta)}</span>` : `<span>${esc(KIND[a.kind] ?? a.kind)}${a.cards ? ` · ${num(a.cards)} cards` : ""}</span>`}${a.host ? `<span class="host">${esc(a.host)}</span>` : ""}</div>
   </div>
 </article>`;
 }
 
-function libCell(f, which, label) {
-  const head = `<span class="lbl-m">${esc(label)}</span>`;
-  if (!f) return `<div>${head}<div class="lib zero">–</div></div>`;
-  if (f.unread?.includes(which)) return `<div>${head}<div class="lib unread">Couldn't read it this time</div></div>`;
-  const n = which === "meta" ? f.meta : f.google;
-  const more = which === "google" && f.googleMore ? "+" : "";
-  const url = safeUrl(which === "meta" ? f.metaUrl : f.googleUrl);
-  const link = url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${n ? "See them →" : "Check →"}</a>` : "";
-  return `<div>${head}<div class="lib${n ? "" : " zero"}">${n ? `${num(n)}${more}` : "None"}<small>${n ? "running now" : "running"}</small>${link ? `<small>${link}</small>` : ""}</div></div>`;
-}
-
-function rivalRow(rv, byId) {
+/** One competitor as a card: its Google Maps cover photo and logo, where it advertises, what it leads with, what its customers say. */
+function compCard(rv, byId, res) {
   const f = rv.adFacts;
   const same = f?.sameAs ? byId.get(f.sameAs) : null;
   const site = safeUrl(rv.website);
-  const libs = same
-    ? `<div style="grid-column:span 2"><span class="lbl-m">Ads</span><div class="said">Same company as #${esc(same.rank)}: its ads are counted there.</div></div>`
-    : `${libCell(f, "meta", "Facebook & Instagram")}${libCell(f, "google", "Google")}`;
-  const leads = [
-    rv.adAngle ? `<div><b>Ads:</b> ${esc(rv.adAngle)}</div>` : "",
-    rv.promises ? `<div><b>Site:</b> ${esc(rv.promises)}</div>` : "",
-    f?.tracking?.length && !same ? `<em>On its site: ${esc(f.tracking.join(", "))}</em>` : "",
-  ].join("");
-  const tags = [
-    ...(rv.complaints ?? []).map((c) => `<span class="tag">${esc(c)}</span>`),
-    ...(rv.praisedFor ?? []).slice(0, 2).map((c) => `<span class="tag good">${esc(c)}</span>`),
-  ].join("");
-  return `<div class="rt-row">
-  <div class="biz"><span class="rank">${esc(rv.rank)}</span><div><div class="name">${esc(rv.name)}</div><div class="meta">${rv.rating != null ? `${stars(rv.rating)} ${esc(rv.rating)} · ` : ""}${rv.reviews != null ? `${num(rv.reviews)} reviews` : "no reviews"}${site ? ` · <a href="${esc(site)}" target="_blank" rel="noopener nofollow">website</a>` : ""}</div></div></div>
-  ${libs}
-  <div class="said"><span class="lbl-m">What they lead with</span>${leads || `<span class="why">Nothing to read</span>`}</div>
-  <div class="cmp"><span class="lbl-m">What customers say</span>${tags ? `<div class="tags">${tags}</div>` : `<span class="why">${rv.read ? "Nothing that repeats" : "Reviews not read"}</span>`}${rv.read ? `<div class="why" style="margin-top:6px">${num(rv.read)} reviews read, ${num(rv.low)} at 3★ or lower</div>` : ""}</div>
-</div>`;
+  const photo = safeUrl(rv.photo);
+  const stat = (label, value, note, cls = "") => `<div class="cs ${cls}"><span class="k">${esc(label)}</span><span class="v">${value}</span><span class="n">${note ?? ""}</span></div>`;
+  const own = (res.rivalAds ?? []).filter((a) => a.rival === rv.id);
+  const longest = Math.max(0, ...own.filter((a) => a.channel === "meta").map((a) => a.days ?? 0));
+  const lib = (which, label) => {
+    if (!f) return stat(label, "–", "not checked", "muted");
+    if (same) return stat(label, "↑", `same company as #${esc(same.rank)}`, "muted");
+    if (f.unread?.includes(which)) return stat(label, "?", "couldn't read it", "unk");
+    const n = which === "meta" ? f.meta : f.google;
+    const more = which === "google" && f.googleMore ? "+" : "";
+    if (!n) return stat(label, "0", "none running", "zero");
+    return stat(label, `${num(n)}${more}`, which === "meta" && longest ? `longest ${num(longest)} days` : "running now");
+  };
+  let lsa = "";
+  if (res.top?.shown) {
+    const b = res.top.businesses.find((x) => x.rival === rv.id);
+    lsa = b ? stat("Local Services Ads", `#${esc(b.position)}`, `of ${esc(res.top.businesses.length)} paying`) : stat("Local Services Ads", "0", "not paying for it", "zero");
+  }
+  const likes = f?.pageLikes ? stat("Facebook page", num(f.pageLikes), "likes") : "";
+  const leads = [rv.adAngle ? `<div><b>Their ads</b>${esc(rv.adAngle)}</div>` : "", rv.promises ? `<div><b>Their site</b>${esc(rv.promises)}</div>` : ""].join("");
+  const tags = [...(rv.complaints ?? []).map((c) => `<span class="tag">${esc(c)}</span>`), ...(rv.praisedFor ?? []).slice(0, 2).map((c) => `<span class="tag good">${esc(c)}</span>`)].join("");
+  const theirAds = own.length && !same;
+  const siteCard = res.sites?.[rv.id]?.read && !same;
+  return `<article class="comp" id="comp-${esc(rv.id)}">
+  <div class="cover"${photo ? "" : ` style="--h:${hueOf(rv.name)}"`}>${photo ? `<img src="${esc(photo)}" alt="" loading="lazy">` : ""}</div>
+  <div class="comp-b">
+    <div class="comp-h">${avatar(rv, "lg", { rank: rv.rank })}<div><h3>${esc(rv.name)}</h3><div class="meta">${rv.rating != null ? `${stars(rv.rating)} <b>${esc(rv.rating)}</b> · ` : ""}${rv.reviews != null ? `${num(rv.reviews)} reviews` : "no reviews"}${rv.category ? ` · ${esc(rv.category)}` : ""}</div></div></div>
+    <div class="cstats">${lib("meta", "Facebook & Instagram ads")}${lib("google", "Google ads")}${lsa}${likes}</div>
+    ${engineLine(rv)}
+    ${leads ? `<div class="leads">${leads}</div>` : ""}
+    ${tags ? `<div class="said-row"><span class="lab">Their customers say</span><div class="tags">${tags}</div>${rv.read ? `<span class="why">${num(rv.read)} reviews read, ${num(rv.low)} at 3★ or lower</span>` : ""}</div>` : rv.read ? `<div class="said-row"><span class="why">${num(rv.read)} reviews read, nothing that repeats</span></div>` : ""}
+    <div class="comp-links">${theirAds ? `<a href="#ads" data-pick="${esc(rv.id)}">See their ${plural(own.length, "ad")} →</a>` : ""}${siteCard ? `<a href="#site-${esc(rv.id)}">Their website →</a>` : ""}${site ? `<a href="${esc(site)}" target="_blank" rel="noopener nofollow">Visit ${ICON.ext}</a>` : ""}</div>
+  </div>
+</article>`;
 }
+
+const engineLine = (rv) => (rv.engine ? `<p class="engine">${esc(rv.engine)}</p>` : "");
 
 function postMock(a, business) {
   const name = business || "Your business";
-  const initials = name.replace(/[^A-Za-z0-9 ]/g, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("") || "Y";
   return `<article class="win">
   <div class="post">
-    <div class="ph"><span class="av">${esc(initials)}</span><div><div class="pn">${esc(name)}</div><div class="ps">Sponsored</div></div></div>
+    <div class="ph">${avatar({ name }, "md")}<div><div class="pn">${esc(name)}</div><div class="ps">Sponsored · ${platformMark("meta")}</div></div></div>
     <div class="pt">${esc(a.primaryText)}</div>
     <div class="creative">${a.theme ? `<span class="tag2">${esc(a.theme)}</span>` : ""}<div class="h">${esc(a.headline)}</div></div>
     <div class="pf"><div><div class="d">yourwebsite.com</div><div class="t">${esc(a.headline)}</div></div><span class="b">Learn more</span></div>
@@ -215,21 +241,39 @@ export function reportHtml(report) {
   const maxTheme = Math.max(1, ...res.themes.map((t) => t.count));
   const unreadMeta = Object.values(facts).some((f) => f.unread?.includes("meta"));
   const adCount = `${num(totals.meta + totals.google)}${totals.googleMore ? "+" : ""}`;
+  const ctx = { ads: allAds, byId };
 
   const statCards = [
     ["rivals", "Competitors on Maps", `${res.rivals.length}`, `${totals.advertising} of them running ads`],
     ["ads", "Ads running now", adCount, `${num(totals.meta)} Facebook & Instagram · ${num(totals.google)}${totals.googleMore ? "+" : ""} Google`],
-    ["watch", "Longest-running ad", longest ? `${num(longest.days)} days` : "–", longest ? `${byId.get(longest.rival)?.name ?? longest.advertiser} (${CHANNEL[longest.channel]})` : "no dated ads"],
+    ["watch", "Longest-running ad", longest ? `${num(longest.days)} days` : "–", longest ? `${whoOf(longest, byId)} (${CHANNEL[longest.channel]})` : "no dated ads"],
     ["weak", "Reviews read", `${num(res.readReviews)}`, res.readReviews ? `${num(res.lowReviews)} of them 3★ or lower` : "reviews were skipped"],
   ];
 
-  const ctx = { ads: allAds, byId };
-
-  const rivalChips = res.rivals
+  // The filters: each choice with how many ads it holds.
+  const count = (fn) => theirs.filter(fn).length;
+  const pick = (f, v, label, n, extra = "") => `<button class="chip" data-f="${f}" data-v="${esc(v)}" aria-pressed="${v === "all"}">${extra}${label}<b>${num(n)}</b></button>`;
+  const rivalPills = res.rivals
     .filter((r) => theirs.some((a) => a.rival === r.id))
-    .map((r) => `<button class="chip" data-f="rival" data-v="${esc(r.id)}" aria-pressed="false" title="${esc(r.name)}">#${esc(r.rank)} ${esc(r.name)}</button>`)
+    .map((r) => `<button class="rpill" data-f="rival" data-v="${esc(r.id)}" aria-pressed="false" title="${esc(r.name)}">${avatar(r, "xs")}<span>${esc(searchName(r.name))}</span><b>${num(count((a) => a.rival === r.id))}</b></button>`)
     .join("");
   const kinds = ["video", "image", "text"].filter((k) => theirs.some((a) => kindOf(a) === k));
+  const channels = ["meta", "google"].filter((c) => theirs.some((a) => a.channel === c));
+  const filters = theirs.length
+    ? `<div class="filters" id="filters">
+    <div class="f-row">
+      <label class="search">${ICON.search}<input id="f-q" type="search" placeholder="Search their ads: an offer, a price, a word…" autocomplete="off" spellcheck="false"></label>
+      <label class="tgl" title="Ads that have run 60 days or more: the ones that pay"><input type="checkbox" id="f-proven"><span class="sw"></span>Proven: 60+ days</label>
+      <label class="sort">Sort<select id="f-sort"><option value="best">Facebook & Instagram first</option><option value="days">Longest running</option><option value="new">Newest first</option><option value="versions">Most versions</option></select></label>
+    </div>
+    <div class="f-row">
+      ${channels.length > 1 ? `<div class="seg">${pick("channel", "all", "Everywhere", theirs.length)}${channels.map((c) => pick("channel", c, c === "meta" ? "Facebook & Instagram" : "Google", count((a) => a.channel === c), platformMark(c))).join("")}</div>` : ""}
+      ${kinds.length > 1 ? `<div class="seg">${pick("kind", "all", "All kinds", theirs.length)}${kinds.map((k) => pick("kind", k, k === "text" ? "Search ads" : `${KIND[k]}s`, count((a) => kindOf(a) === k))).join("")}</div>` : ""}
+    </div>
+    <div class="f-row who"><button class="rpill" data-f="rival" data-v="all" aria-pressed="true"><span>All competitors</span><b>${num(theirs.length)}</b></button>${rivalPills}</div>
+    <div class="f-meta"><span id="ad-count" aria-live="polite"></span><button class="link" id="f-clear" hidden>Clear filters</button></div>
+  </div>`
+    : "";
 
   const themes = res.themes
     .map(
@@ -238,10 +282,10 @@ export function reportHtml(report) {
     <div class="num">${num(t.count)}<small>${t.count === 1 ? "review" : "reviews"}</small></div>
     <h3>${esc(t.name)}</h3>
     <div class="meter"><i style="width:${Math.max(6, Math.round((t.count / maxTheme) * 100))}%"></i></div>
-    <div class="spread">at ${plural(t.rivals.length, "competitor")}</div>
+    <div class="spread">${t.rivals.map((id) => (byId.get(id) ? avatar(byId.get(id), "xs") : "")).join("")}<span>at ${plural(t.rivals.length, "competitor")}</span></div>
   </div>
   <div class="quotes">
-    ${t.quotes.map((q) => `<blockquote>“${esc(q.text)}”<footer>${stars(q.stars)} <span>a customer of ${esc(q.rivalName)}</span></footer></blockquote>`).join("")}
+    ${t.quotes.map((q) => `<blockquote>“${esc(q.text)}”<footer>${stars(q.stars)} ${avatar({ name: q.rivalName, logo: byId.get(q.rival)?.logo }, "xs")}<span>a customer of ${esc(q.rivalName)}</span></footer></blockquote>`).join("")}
     ${t.angle ? `<div class="angle"><b>Your angle</b><span>${esc(t.angle)}</span></div>` : ""}
   </div>
 </article>`,
@@ -261,26 +305,32 @@ export function reportHtml(report) {
     .join("");
 
   const viewerData = Object.fromEntries(
-    allAds.map((a) => [
-      a.id,
-      {
-        who: a.rival === MARKET ? a.advertiser : byId.get(a.rival)?.name ?? a.advertiser,
-        channel: CHANNEL[a.channel],
-        kind: KIND[a.kind] ?? a.kind,
-        days: a.days,
-        since: monthYear(a.startedAt),
-        headline: a.headline,
-        body: a.body,
-        cta: a.cta,
-        host: a.host,
-        image: safeUrl(a.image),
-        video: safeUrl(a.video),
-        youtube: a.youtubeId && /^[A-Za-z0-9_-]{11}$/.test(a.youtubeId) ? a.youtubeId : null,
-        source: safeUrl(a.sourceUrl),
-        link: safeUrl(a.link),
-        versions: a.versions,
-      },
-    ]),
+    allAds.map((a) => {
+      const face = faceOf(a, byId);
+      return [
+        a.id,
+        {
+          who: whoOf(a, byId),
+          logo: safeUrl(face.logo),
+          initials: initials(face.name),
+          hue: hueOf(face.name),
+          channel: CHANNEL[a.channel],
+          kind: KIND[a.kind] ?? a.kind,
+          days: a.days,
+          since: monthYear(a.startedAt),
+          headline: a.headline,
+          body: a.body,
+          cta: a.cta,
+          host: a.host,
+          image: safeUrl(a.image),
+          video: safeUrl(a.video),
+          youtube: a.youtubeId && /^[A-Za-z0-9_-]{11}$/.test(a.youtubeId) ? a.youtubeId : null,
+          source: safeUrl(a.sourceUrl),
+          link: safeUrl(a.link),
+          versions: a.versions,
+        },
+      ];
+    }),
   );
 
   const sections = [
@@ -297,15 +347,6 @@ export function reportHtml(report) {
     ...(res.unknowns?.length ? [["unknowns", "Couldn't see"]] : []),
   ];
 
-  const filters = theirs.length
-    ? `<div class="toolbar">
-    <div class="seg"><button class="chip" data-f="rival" data-v="all" aria-pressed="true">Everyone</button>${rivalChips}</div>
-    <div class="seg"><button class="chip" data-f="channel" data-v="all" aria-pressed="true">Everywhere</button>${theirs.some((a) => a.channel === "meta") ? `<button class="chip" data-f="channel" data-v="meta" aria-pressed="false">Facebook & Instagram</button>` : ""}${theirs.some((a) => a.channel === "google") ? `<button class="chip" data-f="channel" data-v="google" aria-pressed="false">Google</button>` : ""}</div>
-    ${kinds.length > 1 ? `<div class="seg"><button class="chip" data-f="kind" data-v="all" aria-pressed="true">All kinds</button>${kinds.map((k) => `<button class="chip" data-f="kind" data-v="${k}" aria-pressed="false">${esc(k === "text" ? "Search ads" : `${KIND[k]}s`)}</button>`).join("")}</div>` : ""}
-    <span class="count" id="ad-count"></span>
-  </div>`
-    : "";
-
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -314,7 +355,7 @@ export function reportHtml(report) {
 <meta name="robots" content="noindex">
 <title>${esc(title)} · ZuSpy competitor report</title>
 <link rel="icon" href="${logoDataUrl()}">
-<style>${STYLES}${SECTION_STYLES}</style>
+<style>${STYLES}${UI_STYLES}${SECTION_STYLES}</style>
 </head>
 <body${report.anonymous ? ' class="anon"' : ""}>
 ${topbar(sections)}
@@ -322,7 +363,8 @@ ${topbar(sections)}
   <div>
     <span class="eyebrow">Competitor report · ${esc(date)}${report.anonymous ? " · names hidden" : ""}</span>
     <h1>${esc(title)}</h1>
-    <p class="sub">Who shows up first on Google Maps for “${esc(input.service)}”, every ad they're running right now, and what ${num(res.readReviews || 0)} of their customers wrote about them${input.business ? `, for ${esc(input.business)}` : ""}.</p>
+    <p class="sub">Who shows up first on Google Maps for “${esc(input.service)}”, how each one gets its customers, every ad they're running right now, and what ${num(res.readReviews || 0)} of their customers wrote about them${input.business ? `, for ${esc(input.business)}` : ""}.</p>
+    <div class="vs"><span class="lab">Up against</span><div class="stack">${res.rivals.map((r) => `<a href="#comp-${esc(r.id)}" title="#${esc(r.rank)} ${esc(r.name)}">${avatar(r, "md")}</a>`).join("")}</div></div>
     <div class="facts"><span><b>${res.rivals.length}</b> competitors</span><span><b>${esc(adCount)}</b> ads running</span>${longest ? `<span>longest running <b>${num(longest.days)} days</b></span>` : ""}${res.readReviews ? `<span><b>${num(res.readReviews)}</b> reviews read</span>` : ""}</div>
   </div>
   <div class="cluster" aria-hidden="true"><img src="${iconUrl("ads")}" alt=""><img class="big" src="${logoDataUrl()}" alt=""><img src="${iconUrl("weak")}" alt=""><img src="${iconUrl("rivals")}" alt=""><img src="${iconUrl("win")}" alt=""></div>
@@ -345,20 +387,16 @@ ${scorecardSection(res, ctx)}
 
 <section id="ads">
   ${heading("Their ads", "ads")}
-  <p class="lead">Running right now, from Meta's Ad Library and Google's Ads Transparency Center. Facebook and Instagram first, then Google, the longest running first: nobody keeps paying for an ad that doesn't work. Click any ad to see it big.${unreadMeta ? " Some Facebook and Instagram searches couldn't be read this time; the table below says which." : ""}</p>
-  ${filters}
-  ${theirs.length ? `<div class="grid ads" id="ad-grid">${theirs.map((a, i) => adCard(a, byId, i)).join("")}</div>` : `<div class="card empty">None of these competitors has an ad up on Facebook, Instagram or Google right now${unreadMeta ? " (some libraries couldn't be read this time)" : ""}. That's room for you.</div>`}
+  <p class="lead">Running right now, from Meta's Ad Library and Google's Ads Transparency Center, the longest running first: nobody keeps paying for an ad that doesn't work. Click any ad to see it big, then use the arrows to go through them.${unreadMeta ? " Some Facebook and Instagram searches couldn't be read this time; the competitor cards below say which." : ""}</p>
+  ${theirs.length ? `<div class="adsbox">${filters}<div class="grid ads" id="ad-grid">${theirs.map((a, i) => adCard(a, byId, i)).join("")}</div><div class="card empty" id="no-ads" hidden>No ads match these filters. <button class="link" data-clear>Clear filters</button></div></div>` : `<div class="card empty">None of these competitors has an ad up on Facebook, Instagram or Google right now${unreadMeta ? " (some libraries couldn't be read this time)" : ""}. That's room for you.</div>`}
   ${topBlock(res, ctx, input)}
   ${market.length ? `<h3 class="subhead">Others in this market</h3><p class="lead">Businesses in the trade advertising on Facebook and Instagram for this search that aren't in the Maps top ${res.rivals.length}.</p><div class="grid ads">${market.map((a, i) => adCard(a, byId, i)).join("")}</div>` : ""}
 </section>
 
 <section id="rivals">
   ${heading("Who you're up against", "rivals")}
-  <p class="lead">The first businesses on Google Maps for this search, in order: where each advertises, what it leads with, and what its customers keep saying.</p>
-  <div class="rt">
-    <div class="rt-row rt-head"><div>Business</div><div>Facebook & Instagram</div><div>Google</div><div>What they lead with</div><div>What customers say</div></div>
-    ${res.rivals.map((rv) => rivalRow(rv, byId)).join("")}
-  </div>
+  <p class="lead">The first businesses on Google Maps for this search, in order: where each one advertises, what it leads with, and what its customers keep saying.</p>
+  <div class="comps">${res.rivals.map((rv) => compCard(rv, byId, res)).join("")}</div>
 </section>
 
 ${sitesSection(res, ctx)}
@@ -388,7 +426,7 @@ ${unknownsSection(res)}
   <div class="it"><span><b>Ads:</b> Meta's Ad Library (${esc(report.meta_reader === "firecrawl" ? "read through Firecrawl" : report.meta_reader === "none" || report.meta_reader === "off" ? "skipped this time" : "read in a browser")}) and Google's Ads Transparency Center. Pictures and videos are saved with the report because the libraries' links expire.</span></div>
   ${res.readReviews ? `<div class="it"><span><b>Reviews:</b> each competitor's 30 lowest-rated and 10 most relevant Google reviews.</span></div>` : ""}
   ${Object.keys(res.sites ?? {}).length ? `<div class="it"><span><b>Websites:</b> each home page, the Google Tag Manager containers it loads, robots.txt and llms.txt, its sitemaps, and its home page about a year ago in the web archive.</span></div>` : ""}
-  ${res.top ? `<div class="it"><span><b>Top of Google:</b> one live Google search on a phone in the town, for Local Services Ads.</span></div>` : ""}
+  ${res.top ? `<div class="it"><span><b>Top of Google:</b> live Google searches in the town for Local Services Ads.</span></div>` : ""}
   ${res.card ? `<div class="it"><span><b>How each one gets customers:</b> scored by code from what was seen, never by the AI.</span></div>` : ""}
   <div class="it"><span><b>Analysis:</b> ${esc(report.ai ?? "an AI")}, then checked by code: counts come from the reviews it cites, quotes are rebuilt from the reviews' own sentences, and anything naming a competitor is dropped.</span></div>
   <div class="it"><span><b>What nobody can see from outside:</b> ad spend and results (only how long an ad has run), TikTok and Nextdoor ads (no public libraries), and ads run under a page name that doesn't match.${res.unknowns?.length ? ` <a href="#unknowns">The full list →</a>` : ""}</span></div>
@@ -399,53 +437,100 @@ ${ctaBlock()}
 </main>
 ${footer()}
 
-<dialog id="viewer"><button class="x" aria-label="Close" data-close>×</button><div class="viewer"><div class="vm" id="vm"></div><div class="vb" id="vb"></div></div></dialog>
+<dialog id="viewer" aria-label="Ad"><div class="viewer"><div class="vm" id="vm"></div><div class="vside"><div class="vbar"><button class="nav" aria-label="Previous ad" data-step="-1">${ICON.prev}</button><span id="vpos"></span><button class="nav" aria-label="Next ad" data-step="1">${ICON.next}</button><button class="x" aria-label="Close" data-close>×</button></div><div class="vb" id="vb"></div></div></div></dialog>
 <script type="application/json" id="ad-data">${scriptJson(viewerData)}</script>
 <script>
 ${TOC_SCRIPT}
 (() => {
   const data = JSON.parse(document.getElementById("ad-data").textContent);
   const grid = document.getElementById("ad-grid");
-  const state = { rival: "all", channel: "all", kind: "all" };
+  const state = { rival: "all", channel: "all", kind: "all", q: "", proven: false, sort: "best" };
+  const q = document.getElementById("f-q");
+  const proven = document.getElementById("f-proven");
+  const sort = document.getElementById("f-sort");
   const count = document.getElementById("ad-count");
+  const clear = document.getElementById("f-clear");
+  const none = document.getElementById("no-ads");
+  const cards = grid ? [...grid.querySelectorAll(".ad")] : [];
+  const order = {
+    best: (a, b) => Number(a.dataset.n) - Number(b.dataset.n),
+    days: (a, b) => Number(b.dataset.days) - Number(a.dataset.days) || Number(a.dataset.n) - Number(b.dataset.n),
+    new: (a, b) => Number(b.dataset.start) - Number(a.dataset.start) || Number(a.dataset.n) - Number(b.dataset.n),
+    versions: (a, b) => Number(b.dataset.versions) - Number(a.dataset.versions) || Number(b.dataset.days) - Number(a.dataset.days),
+  };
   function apply() {
     if (!grid) return;
+    const words = state.q.toLowerCase().split(/\\s+/).filter(Boolean);
     let shown = 0;
-    grid.querySelectorAll(".ad").forEach((el) => {
-      const ok = ["rival", "channel", "kind"].every((k) => state[k] === "all" || el.dataset[k] === state[k]);
+    for (const el of [...cards].sort(order[state.sort])) {
+      const ok = ["rival", "channel", "kind"].every((k) => state[k] === "all" || el.dataset[k] === state[k])
+        && (!state.proven || Number(el.dataset.days) >= ${LONG_DAYS})
+        && words.every((w) => el.dataset.q.includes(w));
       el.hidden = !ok;
       if (ok) shown++;
-    });
-    if (count) count.textContent = shown + (shown === 1 ? " ad" : " ads");
+      grid.append(el);
+    }
+    if (count) count.textContent = shown + (shown === 1 ? " ad" : " ads") + (shown < cards.length ? " of " + cards.length : "");
+    const active = state.rival !== "all" || state.channel !== "all" || state.kind !== "all" || state.q || state.proven;
+    if (clear) clear.hidden = !active;
+    if (none) none.hidden = shown > 0;
   }
-  document.querySelectorAll(".toolbar .chip").forEach((b) =>
-    b.addEventListener("click", () => {
-      state[b.dataset.f] = b.dataset.v;
-      document.querySelectorAll('.toolbar .chip[data-f="' + b.dataset.f + '"]').forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
-      apply();
-    }),
-  );
+  function choose(f, v) {
+    state[f] = v;
+    document.querySelectorAll('[data-f="' + f + '"]').forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.v === v)));
+    apply();
+  }
+  document.querySelectorAll("#filters [data-f]").forEach((b) => b.addEventListener("click", () => choose(b.dataset.f, b.dataset.v)));
+  if (q) q.addEventListener("input", () => ((state.q = q.value.trim()), apply()));
+  if (proven) proven.addEventListener("change", () => ((state.proven = proven.checked), apply()));
+  if (sort) sort.addEventListener("change", () => ((state.sort = sort.value), apply()));
+  function reset() {
+    state.q = ""; state.proven = false;
+    if (q) q.value = "";
+    if (proven) proven.checked = false;
+    ["rival", "channel", "kind"].forEach((f) => choose(f, "all"));
+  }
+  if (clear) clear.addEventListener("click", reset);
+  document.querySelectorAll("[data-clear]").forEach((b) => b.addEventListener("click", reset));
+  // "See their ads" on a competitor's card: the ads, filtered to theirs.
+  document.querySelectorAll("[data-pick]").forEach((a) => a.addEventListener("click", () => { reset(); choose("rival", a.dataset.pick); }));
   apply();
+
   const dlg = document.getElementById("viewer");
   const vm = document.getElementById("vm");
   const vb = document.getElementById("vb");
+  let list = [];
+  let at = -1;
   const el = (tag, attrs, text) => {
     const n = document.createElement(tag);
     for (const [k, v] of Object.entries(attrs || {})) if (v != null) n.setAttribute(k, v);
     if (text != null) n.textContent = text;
     return n;
   };
-  function open(id) {
+  function open(id, from) {
     const a = data[id];
     if (!a) return;
+    // The arrows go through the ads in view, in the order they're shown.
+    const box = from && from.closest(".grid");
+    list = box ? [...box.querySelectorAll(".ad:not([hidden])")].map((c) => c.dataset.id) : [id];
+    at = Math.max(0, list.indexOf(id));
+    show();
+    if (!dlg.open) dlg.showModal();
+  }
+  function show() {
+    const a = data[list[at]];
     vm.replaceChildren();
     vb.replaceChildren();
     if (a.video) vm.append(el("video", { src: a.video, controls: "", autoplay: "", playsinline: "", poster: a.image }));
     else if (a.youtube && !document.body.classList.contains("anon")) vm.append(el("iframe", { src: "https://www.youtube-nocookie.com/embed/" + a.youtube, allow: "autoplay; encrypted-media", allowfullscreen: "" }));
     else if (a.image) vm.append(el("img", { src: a.image, alt: "" }));
-    else vm.append(el("div", { style: "color:#fff;padding:30px;font-size:20px;font-weight:700" }, a.headline || ""));
-    const who = el("div", { class: "who" });
-    who.append(el("span", { class: "dot" + (a.channel === "Google" ? " google" : "") }), el("span", null, a.who + " · " + a.channel));
+    else vm.append(el("div", { class: "vm-words" }, a.headline || ""));
+    const who = el("div", { class: "v-who" });
+    const av = el("span", { class: "av av-md" + (a.logo ? " pic" : ""), style: a.logo ? null : "--h:" + a.hue });
+    if (a.logo) av.append(el("img", { src: a.logo, alt: "" })); else av.textContent = a.initials;
+    const nm = el("div");
+    nm.append(el("b", null, a.who), el("span", null, a.channel));
+    who.append(av, nm);
     vb.append(who);
     const pills = el("div", { class: "pills" });
     pills.append(el("span", { class: "pill" }, a.kind));
@@ -467,13 +552,21 @@ ${TOC_SCRIPT}
     if (a.source) links.append(el("a", { href: a.source, target: "_blank", rel: "noopener" }, a.channel === "Google" ? "See it on Google's Ads Transparency Center" : "See it in Meta's Ad Library"));
     links.append(el("a", { href: ${JSON.stringify(ZUOPS_URL)}, target: "_blank", rel: "noopener", class: "why" }, "Turn this ad into yours in one click with Zuops →"));
     vb.append(links);
-    dlg.showModal();
+    document.getElementById("vpos").textContent = list.length > 1 ? (at + 1) + " of " + list.length : "";
+    dlg.querySelectorAll(".nav").forEach((b) => (b.disabled = list.length < 2));
+  }
+  function step(d) {
+    if (list.length < 2) return;
+    at = (at + d + list.length) % list.length;
+    show();
   }
   document.querySelectorAll(".ad").forEach((c) => {
-    c.addEventListener("click", () => open(c.dataset.id));
-    c.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open(c.dataset.id)));
+    c.addEventListener("click", () => open(c.dataset.id, c));
+    c.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open(c.dataset.id, c)));
   });
-  document.querySelectorAll("[data-show]").forEach((a) => a.addEventListener("click", () => setTimeout(() => open(a.dataset.show), 250)));
+  document.querySelectorAll("[data-show]").forEach((a) => a.addEventListener("click", () => setTimeout(() => open(a.dataset.show, document.querySelector('.ad[data-id="' + a.dataset.show + '"]')), 250)));
+  dlg.querySelectorAll("[data-step]").forEach((b) => b.addEventListener("click", () => step(Number(b.dataset.step))));
+  dlg.addEventListener("keydown", (e) => { if (e.key === "ArrowRight") step(1); if (e.key === "ArrowLeft") step(-1); });
   dlg.addEventListener("close", () => vm.replaceChildren());
   dlg.addEventListener("click", (e) => (e.target === dlg || e.target.hasAttribute("data-close")) && dlg.close());
   function copy(btn, text) {
@@ -485,6 +578,26 @@ ${TOC_SCRIPT}
     if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => {});
   }
   document.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", (e) => (e.stopPropagation(), copy(b, b.dataset.copy))));
+
+  // The 30-day plan's ticks are kept in this browser.
+  const key = "zuspy-plan:" + document.title + ":" + ${JSON.stringify(report.created_at)};
+  let done = {};
+  try { done = JSON.parse(localStorage.getItem(key) || "{}"); } catch {}
+  const boxes = [...document.querySelectorAll("[data-step-box]")];
+  const tally = document.getElementById("plan-done");
+  function count2() {
+    if (tally) tally.textContent = boxes.filter((b) => b.checked).length + " of " + boxes.length + " done";
+    boxes.forEach((b) => b.closest("li")?.classList.toggle("done", b.checked));
+  }
+  boxes.forEach((b) => {
+    b.checked = !!done[b.dataset.stepBox];
+    b.addEventListener("change", () => {
+      done[b.dataset.stepBox] = b.checked;
+      try { localStorage.setItem(key, JSON.stringify(done)); } catch {}
+      count2();
+    });
+  });
+  count2();
 })();
 </script>
 </body>

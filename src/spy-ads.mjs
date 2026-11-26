@@ -8,9 +8,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fetchPublic, fetchText, pool, within, READ_AS } from "./http.mjs";
 import { checkSite } from "./site-check.mjs";
-import { siteSummary } from "./rules/site.mjs";
+import { logoLinks, siteSummary } from "./rules/site.mjs";
 import { landingUrl } from "./rules/watch.mjs";
-import { keep, mediaTypeOf } from "./media.mjs";
+import { keep, keepImage, mediaTypeOf } from "./media.mjs";
 import { libraryHtml } from "./providers/meta-library.mjs";
 import {
   firstJson,
@@ -223,6 +223,10 @@ export async function spyOnAds(c, rivals) {
   const homes = {};
   const checks = {};
   const copies = [];
+  // Each competitor's logo and Google Maps cover photo, and each other advertiser's page picture, copied into media/.
+  const logos = {};
+  const photos = {};
+  const pagePictures = new Map();
   const videoCopies = [];
 
   for (const f of found) {
@@ -242,6 +246,8 @@ export async function spyOnAds(c, rivals) {
       metaUrl: f.meta.url,
       googleUrl: f.google.host ? googleDomainUrl(f.google.host) : null,
       unread,
+      // Likes on the Facebook page its ads run from (the Ad Library says so with each ad).
+      pageLikes: Math.max(0, ...f.meta.ads.map((a) => a.pageLikes ?? 0)) || null,
     };
 
     let storedVideos = 0;
@@ -278,6 +284,23 @@ export async function spyOnAds(c, rivals) {
     });
   }
 
+  for (const f of found) {
+    const { rival } = f;
+    const home = rival.website ? homeOf(rival.website) : null;
+    const host = siteHost(rival.website);
+    // Best first: the Facebook page's picture (square, made to be a small logo), the site's app icon or logo, and
+    // Google's copy of its icon. A tiny favicon is skipped: initials look better than a blurry square.
+    const candidates = [
+      f.meta.ads.map((a) => a.pagePicture).find(Boolean),
+      ...(f.site.html && home ? logoLinks(f.site.html, home) : []),
+      host ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128` : null,
+    ];
+    copies.push(async () => void (logos[rival.id] = await keepImage(c.dir, candidates, `logo-${rival.id}`, { min: 48 })));
+  }
+  for (const rival of rivals) {
+    if (rival.photo) copies.push(async () => void (photos[rival.id] = await keepImage(c.dir, [rival.photo], `photo-${rival.id}`, { min: 160 })));
+  }
+
   const market = await marketWork;
   let marketVideos = 0;
   market.forEach((m, i) => {
@@ -288,6 +311,14 @@ export async function spyOnAds(c, rivals) {
     ad.video = null;
     ads.push(ad);
     if (picture) copies.push(async () => void (ad.image = await keep(c.dir, picture, ad.id, "image")));
+    // One copy of each advertiser's page picture, shared by its ads.
+    if (m.pagePicture && m.pageId) {
+      if (!pagePictures.has(m.pageId)) pagePictures.set(m.pageId, null);
+      copies.push(async () => {
+        if (pagePictures.get(m.pageId) === null) pagePictures.set(m.pageId, keepImage(c.dir, [m.pagePicture], `page-${m.pageId}`, { min: 40 }));
+        ad.avatar = await pagePictures.get(m.pageId);
+      });
+    }
     if (video && marketVideos < 3) {
       marketVideos++;
       videoCopies.push(async () => {
@@ -317,5 +348,7 @@ export async function spyOnAds(c, rivals) {
   });
   const sheets = await readGoogleAdWords(c, shown);
   const kept = shown.filter((a) => !sheets.has(a.id));
-  return { ads: kept, facts, sites, homes, checks };
+  // Two listings of one company share its logo.
+  for (const [id, first] of sameAs) if (logos[first]) logos[id] = logos[first];
+  return { ads: kept, facts, sites, homes, checks, faces: { logos, photos } };
 }

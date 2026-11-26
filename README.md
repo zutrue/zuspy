@@ -46,7 +46,7 @@ Claude takes it from there, one step at a time:
 You only need one account: **[DataForSEO](https://app.dataforseo.com/register)** (pay as you go, a report uses about
 5 cents of it). The writing runs on your **Claude plan**: when Claude Code's `claude` command is installed, ZuSpy runs it
 in the background with no tools and no API key, so your chat stays short (about 50k tokens a report). Without it,
-Claude reads the brief in the chat and writes the analysis itself. Or use an API key (about 12 cents, under a minute).
+Claude reads the brief in the chat and writes the analysis itself. Or use an API key (about 14 cents, under a minute).
 
 <details>
 <summary>Or install it as a Claude Code plugin (works in every folder)</summary>
@@ -80,8 +80,9 @@ report.
 
 ## What you get
 
-One page that opens in any browser, with every picture saved next to it. These are real runs (garage door repair in
-Phoenix, plumbing in Denver) with the business names hidden and their ads blurred; your own report shows everything.
+One page that opens in any browser, with every picture saved next to it. These screenshots are a real run (plumbing in
+Denver) with the business names hidden and their pictures blurred; your own report shows everything, with each
+competitor's logo and its Google Maps photo.
 
 ![The report: the short version](docs/report-top.jpg)
 
@@ -92,10 +93,11 @@ on how that business really gets its customers.
 
 ![How each one gets customers](docs/report-how-they-get-customers.jpg)
 
-**Their ads.** Every ad they're running on Facebook, Instagram and Google, filtered by competitor, place and kind. Each
-one shows how long it has run, how many versions they run, its words and button. Click to see it big, play the video,
-copy its words or open it in Meta's Ad Library or Google's Ads Transparency Center. "Others in this market" adds the
-businesses advertising for the same search that aren't in the Maps top 5.
+**Their ads.** Every ad they're running on Facebook, Instagram and Google. Search their words ("free", "$99"), pick a
+competitor, a platform or a kind, show only the proven ones (running 60+ days), or sort by newest or most versions.
+Each card shows who runs it, since when, how long it has run, its words and button. Click to see it big, play the
+video, copy its words, open it in Meta's Ad Library or Google's Ads Transparency Center, and arrow through the rest.
+"Others in this market" adds the businesses advertising for the same search that aren't in the Maps top 5.
 
 ![Their ads](docs/report-ads.jpg)
 
@@ -105,8 +107,9 @@ service", "On-time guarantee"). Your competitors among them are marked.
 
 ![Paying for the very top of Google](docs/report-top-of-google.jpg)
 
-**Who you're up against.** The Maps top 5 in order: rating, how many ads each runs where, what their ads and their
-website lead with, and what their customers keep saying.
+**Who you're up against.** The Maps top 5 in order, each as a card with its Google Maps photo and logo: rating, how many
+ads it runs where, its spot in Local Services Ads, its Facebook page's likes, one line on how it gets its customers,
+what its ads and site lead with, and what its customers keep saying. "See their ads" filters the ads to theirs.
 
 ![Who you're up against](docs/report-rivals.jpg)
 
@@ -127,8 +130,9 @@ names a competitor, and each says what you must really do for it to be honest ("
 
 ![Ads that win their customers](docs/report-ads-for-you.jpg)
 
-**Your next 30 days.** Week by week, quickest wins first. Every step links to what it builds on (their ad, their site,
-the top of Google), and none promises a budget or results nobody outside a company can know.
+**Your next 30 days.** Week by week, quickest wins first. Every step links to what it builds on (their ad, a competitor,
+the top of Google), you tick steps off as you go (the page remembers), and none promises a budget or results nobody
+outside a company can know.
 
 ![Your next 30 days](docs/report-plan.jpg)
 
@@ -175,7 +179,7 @@ Measured on real runs in November 2026:
 | --- | --- |
 | DataForSEO (Maps, 40 reviews per competitor, Google ads, Local Services Ads) | about $0.04-0.05 a report |
 | The AI, by Claude Code on your plan (no key) | about 50k tokens a report run in the background (47k measured in Denver); about 200k if Claude reads the brief in the chat instead |
-| The AI, with an Anthropic, OpenRouter or Zurelay key (Claude Sonnet 5.5) | about $0.12 a report |
+| The AI, with an Anthropic, OpenRouter or Zurelay key (Claude Sonnet 5.5) | about $0.13-0.15 a report |
 | Facebook and Instagram ads | free in your own Chrome or Edge (or a few Firecrawl credits) |
 | Their websites, Tag Manager, robots.txt, sitemaps, the web archive | free |
 | A `watch` check | about $0.005 |
@@ -195,7 +199,7 @@ reviews) cost $0.12.
    Job posts and Marketplace listings are left out. Pictures and videos are saved, because the libraries' links expire
    within hours. Google's search ads come as pictures; a small model copies their words.
 3. **The top of Google**: a live Google search in your town for Local Services Ads. Google rotates them, so ZuSpy
-   searches up to four times and says plainly when they didn't show.
+   searches up to six times and says plainly when they didn't show.
 4. **Their websites**: each home page, the Google Tag Manager containers it loads (where most local businesses keep
    their Meta, Google, Microsoft and Nextdoor pixels and their call tracking), robots.txt and llms.txt, their sitemaps
    (town pages, the blog) and the web archive's copy from about a year ago.

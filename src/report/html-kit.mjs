@@ -56,9 +56,9 @@ export function iconUrl(name) {
 /** A section heading led by its icon. */
 export const heading = (text, icon) => `<div class="sec-head">${icon && iconUrl(icon) ? `<img src="${iconUrl(icon)}" alt="">` : ""}<h2>${esc(text)}</h2></div>`;
 
-/** The sticky bar: the logo and the page's sections; the script marks the one in view. */
+/** The sticky bar: the logo, the page's sections (a menu on phones) and how far down the page you are. */
 export const topbar = (links) =>
-  `<nav class="topbar"><div class="wrap"><a class="brand" href="https://github.com/zutrue/zuspy" target="_blank" rel="noopener"><img src="${logoDataUrl()}" alt="">ZuSpy</a><div class="toc">${links.map(([id, label]) => `<a href="#${esc(id)}">${esc(label)}</a>`).join("")}</div></div></nav>`;
+  `<nav class="topbar"><div class="wrap"><a class="brand" href="https://github.com/zutrue/zuspy" target="_blank" rel="noopener"><img src="${logoDataUrl()}" alt="">ZuSpy</a><div class="toc">${links.map(([id, label]) => `<a href="#${esc(id)}">${esc(label)}</a>`).join("")}</div><select class="jump" aria-label="Jump to a section"><option value="">Jump to…</option>${links.map(([id, label]) => `<option value="${esc(id)}">${esc(label)}</option>`).join("")}</select></div><div class="prog"><i></i></div></nav>`;
 
 /** Marks the section in view in the top bar. */
 export const TOC_SCRIPT = `(() => {
@@ -68,7 +68,13 @@ export const TOC_SCRIPT = `(() => {
     links.forEach((l) => l.classList.toggle("on", l.getAttribute("href") === "#" + e.target.id));
   }), { rootMargin: "-40% 0px -55% 0px" });
   links.forEach((l) => { const s = document.querySelector(l.getAttribute("href")); if (s) io.observe(s); });
-})();`;
+  const jump = document.querySelector(".jump");
+  if (jump) jump.addEventListener("change", () => { const s = jump.value && document.getElementById(jump.value); if (s) s.scrollIntoView(); jump.value = ""; });
+  const bar = document.querySelector(".prog i");
+  const fill = () => { const max = document.documentElement.scrollHeight - innerHeight; if (bar) bar.style.width = (max > 0 ? Math.min(100, (scrollY / max) * 100) : 0) + "%"; };
+  addEventListener("scroll", fill, { passive: true });
+  fill();
+})();`
 
 export const plural = (n, one, many = `${one}s`) => `${Number(n).toLocaleString("en-US")} ${n === 1 ? one : many}`;
 

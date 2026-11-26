@@ -103,6 +103,8 @@ export function adFromNode(node) {
         cardCount: cards.length,
         pageCategories: [...new Set(categories.map(str).filter((c) => !!c))],
         pageLikes: likes,
+        // The page's profile picture (usually its logo; the link expires within hours, so it's copied).
+        pagePicture: /^https?:\/\//.test(str(snapshot.page_profile_picture_url) ?? "") ? str(snapshot.page_profile_picture_url) : null,
         rank: 0,
     };
 }

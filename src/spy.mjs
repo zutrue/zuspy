@@ -43,7 +43,7 @@ const writeJson = (file, data) => writeFileSync(file, `${JSON.stringify(data, nu
 
 /**
  * The very top of Google in the town: Local Services Ads and any text ads. Google rotates them (measured 2026-11-26:
- * about one search in four showed them, on a phone or a computer alike), so it searches up to four times, about
+ * about one search in four showed them, on a phone or a computer alike), so it searches up to six times, about
  * $0.002 each, and stops at the first that shows them. Never throws.
  */
 async function googleTop(dfs, input, rivals) {
@@ -51,11 +51,11 @@ async function googleTop(dfs, input, rivals) {
   let seen = null;
   let searches = 0;
   const near = `${input.service} near me`;
-  const tries = [[near, "mobile"], [near, "desktop"], [near, "mobile"], [input.service, "mobile"]];
+  const tries = [[near, "mobile"], [near, "desktop"], [near, "mobile"], [input.service, "mobile"], [near, "desktop"], [input.service, "desktop"]];
   for (let i = 0; i < tries.length && where; i++) {
     const [keyword, device] = tries[i];
     try {
-      const top = { ...topOfGoogle(await dfs.search(keyword, where, device)), search: keyword };
+      const top = { ...topOfGoogle(await dfs.search(keyword, where, device), input.location.split(",")[0]), search: keyword };
       searches++;
       if (top.shown || !seen) seen = top;
       if (top.shown) break;
@@ -150,6 +150,11 @@ export async function spy(opts) {
   const reader = metaReader();
   log(`Pulling their ads (Facebook & Instagram through ${reader.detail}; Google through DataForSEO) and reading their websites ...`);
   const spied = await spyOnAds({ dfs, ai, dir, meter, deadline, service: input.service, location: input.location, log }, rivals);
+  // Their logos and cover photos are now files in the report's folder.
+  for (const r of rivals) {
+    r.logo = spied.faces?.logos[r.id] ?? null;
+    r.photo = spied.faces?.photos[r.id] ?? null;
+  }
   const top = await topWork;
   if (top?.shown) {
     const paying = top.businesses.filter((b) => b.rival).map((b) => b.name);

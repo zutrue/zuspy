@@ -57,6 +57,8 @@ export function pickRivals(items, self, max = MAX_RIVALS) {
             website: typeof it.url === "string" && /^https?:\/\//.test(it.url) ? it.url : null,
             address: typeof it.address === "string" ? it.address : null,
             phone: typeof it.phone === "string" ? it.phone : null,
+            // The listing's cover photo on Google Maps (copied into the report, like its ads' pictures).
+            photo: typeof it.main_image === "string" && /^https:\/\//.test(it.main_image) ? it.main_image : null,
             lat: Number.isFinite(Number(it.latitude)) ? Number(it.latitude) : null,
             lng: Number.isFinite(Number(it.longitude)) ? Number(it.longitude) : null,
             rank: Number(it.rank_group ?? out.length + 1),

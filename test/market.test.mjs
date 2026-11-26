@@ -24,6 +24,7 @@ const items = [
       { type: "local_services_element", title: "A1 Garage Door Service", description: "17+ years in business\nOpen 24 hours  ·  Serves Phoenix\n⁦24/7 emergency services  ·  Local business⁩", rating: { value: 4.8, votes_count: 13000 } },
       { type: "local_services_element", title: "Goody Garage Doors", description: "7+ years in business\nOpen now  ·  Serves Phoenix\nBeat or match price  ·  Free estimate", rating: { value: 4.9, votes_count: 6300 } },
       { type: "local_services_element", title: "I Love It Garage Doors", description: "1 year in business\nOpen now · Serves Phoenix\nFamily owned", rating: { value: 5, votes_count: 143 } },
+      { type: "local_services_element", title: "Squeaks Services", description: "10+ years in business\n4.2 mi · 4620 E Colfax Ave\nDenver · On-time guarantee", rating: { value: 4.8, votes_count: 2000 } },
     ],
   },
   { type: "local_pack", title: "United Garage Door Repair" },
@@ -31,15 +32,17 @@ const items = [
 ];
 
 test("the top of Google: Local Services Ads with their badges, matched to the competitors by name", () => {
-  const top = matchTop(topOfGoogle(items), rivals);
+  const top = matchTop(topOfGoogle(items, "Denver"), rivals);
   assert(top.shown);
   assertEquals(top.businesses.map((b) => [b.position, b.name, b.rival, b.years]), [
     [1, "A1 Garage Door Service", "c2", 17],
     [2, "Goody Garage Doors", "c3", 7],
     [3, "I Love It Garage Doors", null, 1],
+    [4, "Squeaks Services", null, 10],
   ]);
   assertEquals(top.businesses[0].badges, ["24/7 emergency services", "Local business"]);
   assertEquals(top.businesses[1].badges, ["Beat or match price", "Free estimate"]);
+  assertEquals(top.businesses[3].badges, ["On-time guarantee"], "a distance, an address and a town aren't badges");
   assertEquals(top.paid, [{ title: "Garage Door Repair Phoenix", domain: "example-doors.com", text: "Same day service. Call now." }]);
   assertEquals(topOfGoogle([{ type: "organic" }]).shown, false);
   assert(sameBusiness("Goody Garage Doors", "Goody Garage Doors LLC"));
@@ -69,7 +72,7 @@ test("the scorecard: on, off and unknown, decided by code", () => {
   assertEquals(cell("c2", "meta"), { dots: 3, state: "on", text: "28 running · longest 210 days" });
   assertEquals(cell("c1", "meta"), { dots: 0, state: "off", text: "None now · pixel on site" });
   assertEquals(cell("c3", "meta").state, "unknown", "a library that couldn't be read is never 'none'");
-  assertEquals(cell("c2", "lsa").text, "Paying · #1 of 3");
+  assertEquals(cell("c2", "lsa").text, "Paying · #1 of 4");
   assertEquals(cell("c1", "lsa").state, "off");
   assertEquals(cell("c2", "site").dots, 3);
   assertEquals(cell("c1", "ai"), { dots: 0, state: "off", text: "Blocks ChatGPT search" });

@@ -79,7 +79,7 @@ test("names: a business's full name, short forms and first word, never a trade w
 test("anonymous: no business name, website, phone or link survives", () => {
   const r = anonymize(fixture());
   // The page's own icons are embedded as base64, which can spell anything.
-  const text = (JSON.stringify(r) + reportHtml(r) + reportMarkdown(r)).replace(/data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+/g, "");
+  const text = (JSON.stringify(r) + reportHtml(r) + reportMarkdown(r)).replace(/data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+/g, "").replace(/<svg[\s\S]*?<\/svg>/g, "");
   for (const leak of ["Precision", "A1", "a1garage", "precisiongarageaz", "Darcy", "602", "Delgado", "facebook.com/ads/library/?id=123"]) assert(!text.includes(leak), leak);
   assert(text.includes("Competitor B"));
   assert(text.includes("Another business 1"));

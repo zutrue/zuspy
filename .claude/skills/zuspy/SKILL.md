@@ -29,7 +29,7 @@ Do these in order and say in one line what each step is for.
      (the API password is not their website password).
    - The AI that writes the analysis: **no key is needed** when Claude Code is installed (ZuSpy runs it in the
      background on their Claude plan), or when they use ZuSpy from Claude Code (you write it). Or an Anthropic,
-     OpenRouter, Zurelay or other OpenAI-compatible key, if they'd rather it run on its own (about $0.12 a report).
+     OpenRouter, Zurelay or other OpenAI-compatible key, if they'd rather it run on its own (about $0.14 a report).
 
    Then run `zuspy setup` **in the background** (it waits up to 20 minutes for them) and tell them:
    "A ZuSpy setup page just opened in your browser. Paste your keys there, click Test it, then Save and finish. Your
@@ -45,7 +45,7 @@ Do these in order and say in one line what each step is for.
 
 1. Ask (in one message) what they sell and the town, e.g. "garage door repair" and "Phoenix, AZ", and, optionally,
    their business name as it shows on Google Maps (so it's left out of their competitors). US towns only.
-2. Tell them before you start: about 2-4 minutes, about 5 cents of DataForSEO, plus the AI (about $0.12 with a key,
+2. Tell them before you start: about 2-4 minutes, about 5 cents of DataForSEO, plus the AI (about $0.14 with a key,
    or about 50k tokens of their Claude plan without one).
 3. Run `zuspy spy "<what they sell>" "<town, ST>" [--me "<their business>"]`, with a 10-minute timeout. Add
    `--rivals 3` for a quicker, cheaper first look.
