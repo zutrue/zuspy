@@ -36,7 +36,8 @@ Claude takes it from there, one step at a time:
    and the ad to run first.
 
 You only need one account: **[DataForSEO](https://app.dataforseo.com/register)** (pay as you go, a report uses about
-4 cents of it). The AI part runs on your Claude Code plan, or on an API key if you'd rather.
+4 cents of it). The AI part runs on your Claude Code plan (Claude reads a ~100 KB brief and writes the analysis
+itself, a few minutes and roughly 200k tokens), or on an API key if you'd rather (about 10 cents, under a minute).
 
 <details>
 <summary>Or install it as a Claude Code plugin (works in every folder)</summary>
@@ -129,14 +130,15 @@ Measured on real runs in November 2026:
 | | Cost |
 | --- | --- |
 | DataForSEO (Maps, 40 reviews per competitor, Google ads) | about $0.03-0.05 a report |
-| The AI, run by Claude Code (no key) | your Claude Code plan (about 180k tokens for a 3-competitor report) |
+| The AI, run by Claude Code (no key) | your Claude Code plan (180k-230k tokens a report, measured on 3 and 5 competitors) |
 | The AI, with an Anthropic, OpenRouter or Zurelay key (Claude Sonnet 5.5) | about $0.09-0.11 a report |
 | Facebook and Instagram ads | free in your own Chrome or Edge (or a few Firecrawl credits) |
 | A `watch` check | about $0.005 |
 
 Real reports: garage door repair in Phoenix (5 competitors, 100+ ads running, 153 reviews read) took 1 minute 53
-seconds and cost $0.15 with an API key. Roof repair in Tampa (4 competitors, 122 reviews) cost $0.12. A med spa
-report in Boise written by Claude Code cost $0.03 of DataForSEO.
+seconds and cost $0.15 with an API key. Roof repair in Tampa (4 competitors, 122 reviews) cost $0.12. Plumbing in
+Denver (5 competitors, 48 ads, 183 reviews), set up from scratch by a fresh Claude Code with only the prompt above:
+44 seconds of collecting, $0.04 of DataForSEO, and Claude wrote the analysis.
 
 ## How it works, and why you can trust it
 

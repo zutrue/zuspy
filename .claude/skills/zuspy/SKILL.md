@@ -48,8 +48,10 @@ Do these in order and say in one line what each step is for.
    or your own Claude Code usage without one).
 3. Run `zuspy spy "<what they sell>" "<town, ST>" [--me "<their business>"]`, with a 10-minute timeout. Add
    `--rivals 3` for a quicker, cheaper first look.
-4. **Without an AI key** the run stops after collecting and prints three steps. Do them yourself:
-   read the folder's `prompt.md` completely (open the Google ad pictures it lists), write ONLY the JSON it asks for to
+4. **Without an AI key** the run stops after collecting and prints three steps. This is the longest part (the brief is
+   about 100 KB): tell the user you're reading their competitors' ads and reviews now. Do the steps yourself:
+   read the folder's `prompt.md` completely (open the Google ad pictures it lists when you can; skipping unreadable ones
+   is fine), write ONLY the JSON it asks for to
    `analysis.json` in that folder, then run `zuspy finish "<folder>"`. Follow the brief's rules exactly: themes list
    real review ids, quotes point at a review id and a sentence number, ads never name a competitor, and nothing is
    promised that the business didn't say it does (put it in "needs").

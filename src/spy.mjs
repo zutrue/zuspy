@@ -159,6 +159,18 @@ export function finish(dir, log = console.log) {
   }
   const result = settleSpyResult(raw, state.rivals, state.reviews, state.spied);
   if (!result) throw new Error("analysis.json has no themes, ads or competitor ads ZuSpy could use. Check it follows the shape in prompt.md.");
+  // What the checks kept, so whoever wrote analysis.json knows what didn't make it and why.
+  const n = (v) => (Array.isArray(v) ? v.length : 0);
+  // [written, kept, the most a report keeps, what, why one is dropped]
+  const kept = [
+    [n(raw.themes), result.themes.length, 6, "themes", "a theme needs real review ids from the brief"],
+    [n(raw.ads), result.ads.length, 8, "ads", "an ad that names a competitor, or has no headline or text, is dropped"],
+    [n(raw.offers), result.offers.length, 6, "offers", "an offer that names a competitor is dropped"],
+    [n(raw.ad_moves), result.adMoves?.length ?? 0, 3, "moves", "a move with a dollar amount or ad results is dropped"],
+  ];
+  const quotes = result.themes.reduce((s, t) => s + t.quotes.length, 0);
+  log(`Checked: kept ${kept.map(([had, got, , what]) => `${got} of ${had} ${what}`).join(", ")}, and ${quotes} quotes rebuilt from real review sentences.`);
+  for (const [had, got, most, what, why] of kept) if (got < Math.min(had, most)) log(`  ${Math.min(had, most) - got} ${what} dropped: ${why}.`);
   const cost = existsSync(join(dir, "cost.json")) ? JSON.parse(readFileSync(join(dir, "cost.json"), "utf8")) : null;
   return saveReport(dir, state, result, cost, log);
 }
@@ -193,12 +205,23 @@ export function costLine(cost) {
 
 /** The prompt Claude Code answers when there's no AI key: the same prompt as the API's, plus where to write. */
 function claudeCodePrompt(dir, prompt, ads) {
-  const unread = ads.filter((a) => a.channel === "google" && a.kind !== "video" && a.image && !/^https?:/.test(a.image) && !a.headline && !a.body).slice(0, 24);
+  // The longest-running of each competitor's Google picture ads, at most 12: enough to know what they say.
+  const perRival = new Map();
+  const unread = ads
+    .filter((a) => a.channel === "google" && a.kind !== "video" && a.image && !/^https?:/.test(a.image) && !a.headline && !a.body)
+    .sort((a, b) => (b.days ?? 0) - (a.days ?? 0))
+    .filter((a) => {
+      const n = perRival.get(a.rival) ?? 0;
+      perRival.set(a.rival, n + 1);
+      return n < 3;
+    })
+    .slice(0, 12);
   const pictures = unread.length
     ? `
-Google shows its search and picture ads as images, so their words aren't in the list below. Before you write, open these
-pictures (they're in the report folder) and copy the words printed on each, exactly as written, into "google_ad_words".
-Skip any that are Google's layout sheet ("Collapsed ad on mobile ... Expanded ad") or have no readable words.
+Optional, but it makes the report better: Google shows its search and picture ads as images, so their words aren't in
+the brief. Open these pictures (each competitor's longest-running ones) and copy the words printed on each, exactly as
+written, into "google_ad_words". Skip any you can't read, any error page, and Google's layout sheets ("Collapsed ad on
+mobile ... Expanded ad").
 ${unread.map((a) => `- ${a.id}: ${join(dir, a.image)}`).join("\n")}
 `
     : "";
@@ -216,7 +239,8 @@ ZuSpy checks it with code before it becomes the report: theme counts come from t
 count), quotes are rebuilt from the review sentence you point at, and ads or offers naming a competitor are dropped.
 A review may be listed under more than one theme when it complains about both. Reviews and ad text were cut to a few
 hundred characters, so pick quote sentences that are complete. "google_ad_words" is copied as printed, names and all;
-the no-names rule is only for the ads and offers you write.
+the no-names rule is only for the ads and offers you write. An "ad_moves" line with a dollar amount or ad results
+(ROAS, CTR) is dropped, so describe the move without them. "zuspy finish" prints what its checks kept and dropped.
 
 ---
 

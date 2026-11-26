@@ -473,7 +473,7 @@ export function reportMarkdown(report) {
   const L = [];
   L.push(`# ${input.service} in ${input.location}: competitor report`);
   L.push("");
-  L.push(`${new Date(report.created_at).toISOString().slice(0, 10)} · made with [ZuSpy](https://github.com/zutrue/zuspy)`);
+  L.push(`${new Date(report.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} · made with [ZuSpy](https://github.com/zutrue/zuspy)`);
   L.push("");
   if (res.summary) L.push(res.summary, "");
   if (res.theirAds) L.push(res.theirAds, "");
