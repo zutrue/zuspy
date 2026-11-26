@@ -56,6 +56,7 @@ export function pickRivals(items, self, max = MAX_RIVALS) {
             category: typeof it.category === "string" ? it.category : null,
             website: typeof it.url === "string" && /^https?:\/\//.test(it.url) ? it.url : null,
             address: typeof it.address === "string" ? it.address : null,
+            phone: typeof it.phone === "string" ? it.phone : null,
             lat: Number.isFinite(Number(it.latitude)) ? Number(it.latitude) : null,
             lng: Number.isFinite(Number(it.longitude)) ? Number(it.longitude) : null,
             rank: Number(it.rank_group ?? out.length + 1),
@@ -72,7 +73,7 @@ export function sentencesOf(text) {
     return parts.map((s) => s.trim()).filter((s) => s.length > 1);
 }
 /** What the model sees: every review numbered, split into sentences, the rival's site in a few lines. */
-export function spyPrompt(input, rivals, reviews, sites, spied) {
+export function spyPrompt(input, rivals, reviews, sites, spied, market = "") {
     const adsBlock = spied
         ? `
 
@@ -103,29 +104,61 @@ Rules:
 - In sentences call a business by its name, never by its id ("c1"); ids belong only in the id fields.
 - About their ads say only what is listed below. Never guess what an ad costs, how well it does, or who it reaches. When there are no reviews to read, leave "themes" and "praise" empty and build the ads and offers on what their ads leave unsaid.
 
-${rivalBlock}${adsBlock}
+${rivalBlock}${adsBlock}${market
+        ? `
+
+HOW EACH ONE GETS CUSTOMERS (checked by code from their websites, the ad libraries and Google; never contradict it; "unknown" means it couldn't be checked, never that they don't do it):
+${market}
+
+What these signs mean for a local business:
+- An ad that has run 60+ days pays; one that started this month is a test.
+- Many town pages (like /garage-door-repair-mesa) = they rank town by town on Google; a blog kept up does the same, slower.
+- Local Services Ads = they pay per lead for Google's screened badge at the very top on phones.
+- A pixel or ad tag with no ads in the library = paused, past, or run under another name; never say they're running ads.
+- A different phone number on the site than on Google, or a call-tracking tool = they track which ads ring the phone.
+- Texting or chat, online booking and financing turn visitors into jobs; what most of them lack is an opening.
+- AI assistants blocked = ChatGPT and Perplexity can't read their site when someone asks them for a recommendation.
+- A headline or offer that changed since a year ago shows what they learned; say what they moved toward.`
+        : ""}
 
 Return JSON only:
 {
  "summary": "2-3 sentences: the biggest gap in this market and how to win it",${spied
         ? `
  "their_ads": "2-3 sentences: what their ads lead with, which has run longest, and the gap nobody's ad covers",
- "ad_moves": [{"move": "under 12 words: one thing to do about their ads, e.g. Copy the layout of their longest-running ad with your own offer", "ad_id": "the ad it is about, e.g. c1-m1, or empty"}],`
+`
+        : ""}${market
+        ? `
+ "engines": [{"id": "c1", "engine": "one sentence: how this business gets its customers, built only on what is listed (ads, Local Services Ads, town pages, reviews, tools)"}],`
         : ""}
+ "plan": [{"week": 1, "step": "one concrete thing to do, under 30 words, with a number where it helps (how many ads, pages or reviews)", "refs": ["what it builds on: an ad id like c1-m2, a competitor id like c2, or lsa"]}],
  "themes": [{"name": "short name, e.g. No-shows and late arrivals", "review_ids": ["c1-r3"], "quotes": [{"id": "c1-r3", "sentence": 0}], "angle": "one sentence: how the business wins this"}],
  "praise": [{"name": "what rivals get praised for", "review_ids": ["c2-r1"]}],
  "rivals": [{"id": "c1", "complaints": ["2-4 word labels"], "praised_for": ["2-4 word labels"], "promises": "what their website leads with, in under 15 words, or empty"${spied ? `, "ad_angle": "what its ads lead with, in under 12 words, or empty"` : ""}}],
  "ads": [{"theme": "theme name", "headline": "under 40 characters", "primary_text": "2-4 short sentences", "why": "under 16 words", "needs": "what the business must really do for this ad to be honest, or empty"}],
  "offers": [{"offer": "under 60 characters", "why": "under 20 words", "needs": "or empty"}]
 }
-Give 3-6 themes (most common first), 6 ads (at least one per top theme) and 4 offers${spied ? ", and up to 3 ad_moves" : ""}.`;
+Give 3-6 themes (most common first), 6 ads (at least one per top theme), 4 offers${market ? ", one engine line per competitor" : ""}, and a 30-day plan of 6-10 steps over weeks 1-4 (week 1: the quickest wins; each step builds on something above, named in refs). A plan step never gives a budget in dollars or what an ad will return (no ROAS, CTR, cost per lead).`;
 }
 /** Mostly capitals ("THEY NEVER CAME"): a real quote, but it reads as a rant on an ad's research page. */
 export function shouting(s) {
     const letters = s.replace(/[^A-Za-z]/g, "");
     return letters.length >= 12 && letters.replace(/[^A-Z]/g, "").length / letters.length > 0.6;
 }
-const words = (v, max) => typeof v === "string" ? v.replace(/\s+/g, " ").trim().replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "").slice(0, max) : "";
+/** A model's text, tidied and kept under `max` characters: cut at a sentence's end (or a word's) never mid-word. */
+const words = (v, max) => {
+    if (typeof v !== "string")
+        return "";
+    const t = v.replace(/\s+/g, " ").trim().replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "");
+    if (t.length <= max)
+        return t;
+    const head = t.slice(0, max);
+    const end = Math.max(head.lastIndexOf(". "), head.lastIndexOf("! "), head.lastIndexOf("? "));
+    if (end >= max * 0.6)
+        return head.slice(0, end + 1);
+    const space = head.lastIndexOf(" ");
+    return `${head.slice(0, space > max * 0.6 ? space : max - 1).replace(/[,;:\s]+$/, "")}…`;
+};
 /** Pulls the first JSON object out of a model's answer. */
 export function firstJson(text) {
     const m = text.match(/\{[\s\S]*\}/);
@@ -222,6 +255,19 @@ export function settleSpyResult(raw, rivals, reviews, spied) {
     const rivalAds = [...(spied?.ads ?? [])].sort((a, b) => (b.days ?? -1) - (a.days ?? -1));
     if (!themes.length && !ads.length && !rivalAds.length)
         return null;
+    const rivalIds = new Set(rivals.map((r) => r.id));
+    const engineOf = new Map(arr(raw.engines).map((e) => [String(e?.id), words(e?.engine, 260)]).filter(([id, text]) => rivalIds.has(id) && text));
+    for (const r of rivalsView)
+        if (engineOf.has(r.id))
+            r.engine = engineOf.get(r.id);
+    const refOk = (x) => adIds.has(x) || rivalIds.has(x) || x === "lsa";
+    // A step that promises money (a budget, what an ad returns) is dropped: nobody outside a company can know it.
+    const promisesMoney = /\$\s?\d[\d,.]*\s*k?\s*(?:\/|a|per)\s*(?:day|week|month|mo)\b|budget of\s*\$|\bROAS\b|\bCTR\b|\bCPC\b|\bCPL\b|cost per (?:lead|click)/i;
+    const plan = arr(raw.plan)
+        .map((p) => ({ week: Math.min(4, Math.max(1, Math.round(Number(p?.week)) || 1)), step: words(p?.step, 280), refs: [...new Set(arr(p?.refs).map(String).filter(refOk))].slice(0, 4) }))
+        .filter((p) => p.step && !promisesMoney.test(p.step))
+        .sort((a, b) => a.week - b.week)
+        .slice(0, 10);
     const adMoves = arr(raw.ad_moves)
         .map((m) => ({ move: words(m?.move, 140), adId: adIds.has(String(m?.ad_id)) ? String(m.ad_id) : null }))
         .filter((m) => m.move && !/\$\s?\d|\bROAS\b|\bCTR\b/i.test(m.move))
@@ -235,6 +281,7 @@ export function settleSpyResult(raw, rivals, reviews, spied) {
         offers,
         readReviews: reviews.length,
         lowReviews: reviews.filter((r) => r.stars <= 3).length,
+        plan,
         ...(spied ? { rivalAds, theirAds: words(raw.their_ads, 600).replace(/\s*\((?:c\d(?:-[mg]\d+)?(?:,\s*)?)+\)/g, ""), adMoves } : {}),
     };
 }

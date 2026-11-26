@@ -78,7 +78,7 @@ export function watchHtml(dir) {
 
   const s = snap?.site;
   const groups = {};
-  for (const t of s?.tools ?? []) (groups[t.group] ??= []).push(t.name);
+  for (const t of s?.tools ?? []) (groups[t.group] ??= []).push(t.hidden ? `${t.name} (in Tag Manager)` : t.name);
   const landings = (snap?.landings ?? []).filter((l) => l.read);
   const sections = [["changes", "What changed"], ["ads", "Their ads now"], ["site", "Their website"]];
 

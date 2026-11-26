@@ -37,6 +37,7 @@ import {
   WATCH_ADS_PER_LIBRARY,
 } from "./rules/watch.mjs";
 import { renderWatch } from "./report/watch-html.mjs";
+import { gtmIds } from "./rules/site.mjs";
 
 const watchRoot = () => join(reportsDir(), "watch");
 const readJson = (file, fallback = null) => (existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : fallback);
@@ -181,6 +182,13 @@ async function checkOne(watch, log) {
 
   const site = home ? siteFacts(home) : null;
   const spied = await adsWork;
+  // Its tools as the spy's site check read them: the page's own plus the pixels inside its Tag Manager containers.
+  const check = spied?.checks?.c1;
+  if (site && check?.read) {
+    site.tools = check.stack.map(({ name, group, hidden }) => ({ name, group, hidden }));
+    // True only when every container the page loads was read, so a tool missing from one isn't "removed".
+    site.tagManager = gtmIds(home).every((id) => check.gtm.includes(id));
+  }
   // The check's pictures live in its own folder; the page reads them from there.
   const rel = (p) => (p && !/^https?:/.test(p) ? `checks/${stamp}/${p}` : p);
   const ads = (spied?.ads ?? []).filter((a) => a.rival === "c1").map((a) => ({ ...a, image: rel(a.image), video: rel(a.video), key: adKey(a) }));

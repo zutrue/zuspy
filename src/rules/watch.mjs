@@ -59,7 +59,7 @@ export const TOOL_GROUP_LABEL = {
 };
 const TOOLS = [
     ["Meta Pixel", "ads", /connect\.facebook\.net\/[^"']*fbevents|fbq\(\s*['"]init/i],
-    ["Google Ads tag", "ads", /googleadservices\.com|gtag\(\s*['"]config['"]\s*,\s*['"]AW-|[?&]id=AW-\d/i],
+    ["Google Ads tag", "ads", /googleadservices\.com|gtag\(\s*['"]config['"]\s*,\s*['"]AW-|[?&]id=AW-\d|\bAW-\d{9,11}\b/i],
     ["TikTok Pixel", "ads", /analytics\.tiktok\.com|ttq\.load\(/i],
     ["Microsoft Ads tag", "ads", /bat\.bing\.com/i],
     ["Nextdoor Pixel", "ads", /ads\.nextdoor\.com/i],
@@ -151,6 +151,9 @@ export function offersIn(chunks, max = 6) {
         for (const part of parts) {
             const text = part.trim();
             if (text.length < 8 || text.length > 150 || !OFFER.test(text))
+                continue;
+            // A customer's words on the page ("they sent out Cody the next day") aren't an offer.
+            if (/\b(I|I'm|I've)\b/.test(text) || /\b(my|he|she|they|their|them)\b/i.test(text))
                 continue;
             // A sentence that lists what's always free ("free estimates, free furniture moving and a warranty") is a
             // description, not an offer: without a number in it, only a short line counts.
@@ -431,10 +434,11 @@ export function diffSnapshots(prev, next) {
         }
         const hadTool = new Set(a.tools.map((t) => t.name));
         const hasTool = new Set(b.tools.map((t) => t.name));
-        for (const tool of b.tools.filter((t) => !hadTool.has(t.name))) {
+        // A pixel first seen because this check could read their Tag Manager (and the last one couldn't) isn't new.
+        for (const tool of b.tools.filter((t) => !hadTool.has(t.name) && !(t.hidden && !a.tagManager))) {
             out.push({ at, kind: "tool_new", weight: tool.group === "ads" || tool.group === "calls" ? 2 : 1, title: `Added ${tool.name} to their website`, detail: TOOL_GROUP_LABEL[tool.group], why: TOOL_WHY[tool.group] ?? null });
         }
-        for (const tool of a.tools.filter((t) => !hasTool.has(t.name) && t.group === "ads")) {
+        for (const tool of a.tools.filter((t) => !hasTool.has(t.name) && t.group === "ads" && (!t.hidden || b.tagManager))) {
             out.push({ at, kind: "tool_gone", weight: 1, title: `Removed ${tool.name} from their website`, detail: TOOL_GROUP_LABEL[tool.group] });
         }
     }

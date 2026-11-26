@@ -41,6 +41,13 @@ function fixture() {
   };
 }
 
+test("a name's first two words stand for it only when they're its own", () => {
+  assert(!nameAliases("Same Day Water Heater Pros", { strict: true }).includes("Same Day"));
+  assert(nameAliases("Professional Plumbers Denver").includes("Professional Plumbers"), "a competitor's short name is always hidden");
+  assert(nameAliases("Benjamin Franklin Plumbing of Denver").includes("Benjamin Franklin"));
+  assert(!nameAliases("Professional Plumbers Denver").includes("Professional"), "Google's badge 'Professional service' stays");
+});
+
 test("the page escapes everything that came from someone else's site, ad or review", () => {
   const html = reportHtml(fixture());
   assert(!html.includes("<script>alert"), "raw script from an ad or review");

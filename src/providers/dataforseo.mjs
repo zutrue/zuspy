@@ -1,7 +1,8 @@
 // DataForSEO (https://dataforseo.com): Google Maps results, a business's Google reviews sorted any way, and Google's
 // Ads Transparency Center. Pay as you go; every call's real price comes back in its answer and is added to the meter.
 //
-// Measured 2026-11: a Maps search ~$0.002, a review task ~$0.00075 per 10 reviews, an Ads Transparency lookup ~$0.002.
+// Measured 2026-11: a Maps search ~$0.002, a review task ~$0.00075 per 10 reviews, an Ads Transparency lookup ~$0.002,
+// a Google search ~$0.002.
 export const API = "https://api.dataforseo.com/v3";
 export const US = 2840;
 
@@ -38,6 +39,21 @@ export class DataForSeo {
     const j = await this.post("/serp/google/maps/live/advanced", [{ keyword: keyword.slice(0, 200), location_code: US, language_code: "en", device: "desktop", depth }], 60_000);
     const task = j.tasks?.[0];
     if (Number(task?.status_code) !== 20000) throw new Error(`Google Maps search failed: ${task?.status_message ?? "no answer"}`);
+    return task.result?.[0]?.items ?? [];
+  }
+
+  /**
+   * One live Google search as a phone in that place sees it (where Local Services Ads show). `where` is
+   * { location_name } or { location_coordinate }. Throws with `.code` when the task is refused (40501: unknown place).
+   */
+  async search(keyword, where, device = "mobile") {
+    const j = await this.post("/serp/google/organic/live/advanced", [{ keyword: keyword.slice(0, 200), ...where, language_code: "en", device, depth: 10 }], 60_000);
+    const task = j.tasks?.[0];
+    if (Number(task?.status_code) !== 20000) {
+      const e = new Error(`Google search failed: ${task?.status_message ?? "no answer"}`);
+      e.code = Number(task?.status_code ?? 0);
+      throw e;
+    }
     return task.result?.[0]?.items ?? [];
   }
 

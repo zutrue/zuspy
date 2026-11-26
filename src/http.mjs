@@ -6,6 +6,10 @@ import { isIP } from "node:net";
 export const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 /** Some sites turn a browser's name away from a server and let a plainly named reader in. */
 export const READER_UA = "Mozilla/5.0 (compatible; ZuSpy/1.0; +https://github.com/zutrue/zuspy)";
+/** ...and a few answer anything with "Mozilla" in its name with an error page, but let a plain name in (2026-11-26). */
+export const PLAIN_UA = "ZuSpy/1.1 (+https://github.com/zutrue/zuspy)";
+/** The names a page is asked for with, in order, until one gets the page. */
+export const READ_AS = [BROWSER_UA, READER_UA, PLAIN_UA];
 
 function privateAddress(ip) {
   if (isIP(ip) === 4) {
@@ -90,7 +94,7 @@ export async function fetchText(url, opts = {}) {
 
 /** A web page's HTML, trying a browser's name and then a plain reader's; null for nothing or a bot-check page. */
 export async function pageHtml(url, timeoutMs = 10_000) {
-  for (const ua of [BROWSER_UA, READER_UA]) {
+  for (const ua of READ_AS) {
     const html = await fetchText(url, { timeoutMs, headers: { "User-Agent": ua, Accept: "text/html,*/*" } });
     if (!html || html.length < 400 || /<title>\s*(Just a moment|Attention Required|Access denied)/i.test(html)) continue;
     return html;

@@ -3,7 +3,10 @@
 This repo is ZuSpy: a CLI that spies on a local business's competitors. It finds who shows up first on Google Maps
 for a service in a town, reads every ad those competitors run on Facebook, Instagram and Google, reads their worst
 Google reviews, and writes the patterns, ads and offers that win their customers into a one-file HTML report. `watch`
-checks one company again and again and lists what changed.
+checks one company again and again and lists what changed. Each report also scores how each competitor gets customers
+(by code), reads their websites (pixels inside Google Tag Manager, town pages, AI crawlers, a year ago in the web
+archive), checks Google's Local Services Ads, compares with the last report on the same market, and ends in a 30-day
+plan and a list of what it couldn't see.
 
 **When the user wants to set ZuSpy up, run a report, or research competitors, follow the `zuspy` skill
 (`.claude/skills/zuspy/SKILL.md`) step by step.** In this repo the CLI is `node bin/zuspy.mjs`.
@@ -24,6 +27,12 @@ A report costs the user a little money (DataForSEO, and the AI when they use a k
 - `src/rules/` is ported from Zuops' Competitor Spy (`_shared/competitor-spy*.ts`, `competitor-watch.ts`,
   `fb-ad-library-search.ts`): pure rules for picking rivals and ads, the prompt, checking the AI's answer, and the
   watch diff. Keep their behaviour in step with `test/spy.test.mjs`, `test/ads.test.mjs` and `test/watch.test.mjs`.
-- `src/spy.mjs` is the report pipeline, `src/watch.mjs` the watch pipeline, `src/setup.mjs` the local key page,
-  `src/report/` the pages (everything from the web is escaped; see `test/report.test.mjs`).
+- ZuSpy's own rules: `src/rules/site.mjs` (Tag Manager, robots.txt/llms.txt, town pages, profiles, a year ago),
+  `google-top.mjs` (Local Services Ads), `scorecard.mjs` (how each one gets customers, what couldn't be seen) and
+  `changes.mjs` (since the last report), tested in `test/site.test.mjs` and `test/market.test.mjs`. A channel that
+  couldn't be checked is "unknown", never "none".
+- `src/spy.mjs` is the report pipeline, `src/site-check.mjs` reads each site, `src/watch.mjs` the watch pipeline,
+  `src/setup.mjs` the local key page, `src/providers/claude-cli.mjs` runs Claude Code headless as the writer (no
+  tools, no API key in its environment), `src/report/` the pages (everything from the web is escaped; see
+  `test/report.test.mjs`).
 - Reports (`zuspy-reports/`) and `.env` are gitignored; never commit either.

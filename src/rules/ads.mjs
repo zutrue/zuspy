@@ -366,7 +366,7 @@ export function adsPromptBlock(rivals, ads, facts) {
             return `${r.id}: ${r.name}: another listing of ${f.sameAs} (same website); its ads are listed there.`;
         const own = ads.filter((a) => a.rival === r.id);
         const found = f
-            ? `${f.unread.includes("meta") ? "Facebook/Instagram: couldn't be read" : `Facebook/Instagram: ${f.meta} ads running`}; ${f.unread.includes("google") ? "Google: couldn't be read" : `Google: ${f.google}${f.googleMore ? "+" : ""} ads running`}${f.tracking.length ? `; on its site: ${f.tracking.join(", ")}` : ""}`
+            ? `${f.unread.includes("meta") ? "Facebook/Instagram: couldn't be read" : `Facebook/Instagram: ${f.meta} ads running`}; ${f.unread.includes("google") ? "Google: couldn't be read" : `Google: ${f.google}${f.googleMore ? "+" : ""} ads running`}${f.tracking?.length ? `; on its site: ${f.tracking.join(", ")}` : ""}`
             : "ads not checked";
         // ZuSpy: the longest-running ad of each, worded or not, so the summary names the same one the report's header does.
         const oldest = own.reduce((best, a) => (a.days != null && (!best || a.days > (best.days ?? -1)) ? a : best), null);

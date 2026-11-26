@@ -6,7 +6,10 @@
 // that can't be read is marked unread (never "no ads") and the rest goes on.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fetchPublic, fetchText, pool, BROWSER_UA } from "./http.mjs";
+import { fetchPublic, fetchText, pool, within, READ_AS } from "./http.mjs";
+import { checkSite } from "./site-check.mjs";
+import { siteSummary } from "./rules/site.mjs";
+import { landingUrl } from "./rules/watch.mjs";
 import { keep, mediaTypeOf } from "./media.mjs";
 import { libraryHtml } from "./providers/meta-library.mjs";
 import {
@@ -34,9 +37,17 @@ const left = (c) => c.deadline - Date.now();
 
 /** The home page's visible words (~1,500 characters) and the ad trackers in its source. */
 async function readSite(url) {
-  const got = await fetchPublic(url, { maxBytes: 2 * 1024 * 1024, timeoutMs: 12_000, headers: { "User-Agent": BROWSER_UA } });
-  if (!got.ok) return { text: "", tags: [], html: null };
-  const html = new TextDecoder().decode(got.bytes);
+  let html = null;
+  for (const ua of READ_AS) {
+    const got = await fetchPublic(url, { maxBytes: 2 * 1024 * 1024, timeoutMs: 12_000, headers: { "User-Agent": ua, Accept: "text/html,*/*" } });
+    const text = got.ok ? new TextDecoder().decode(got.bytes) : "";
+    // An error, a bot check or an empty shell: ask again under another name.
+    if (text.length >= 400 && !/<title>\s*(Just a moment|Attention Required|Access denied)/i.test(text)) {
+      html = text;
+      break;
+    }
+  }
+  if (!html) return { text: "", tags: [], html: null };
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "";
   const desc = html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)/i)?.[1] ?? "";
   const body = html
@@ -48,6 +59,15 @@ async function readSite(url) {
     .replace(/\s+/g, " ")
     .trim();
   return { text: `${title} | ${desc} | ${body}`.replace(/\s+/g, " ").slice(0, 1500), tags: trackingTags(html), html };
+}
+
+/** A website's home page, from any link to it. */
+function homeOf(link) {
+  try {
+    return `${new URL(landingUrl(link) ?? link).origin}/`;
+  } catch {
+    return link;
+  }
 }
 
 const loginWall = (html) => /log ?in to continue|You must log in/i.test(html);
@@ -174,13 +194,26 @@ export async function spyOnAds(c, rivals) {
     rivals
       .filter((r) => !sameAs.has(r.id))
       .map(async (rival) => {
-        const [site, meta, google] = await Promise.all([
-          rival.website ? readSite(rival.website).catch(() => ({ text: "", tags: [], html: null })) : Promise.resolve({ text: "", tags: [], html: null }),
+        // The home page (Google's link is often a location page with tracking tags, which some sites answer with an
+        // error page): what the business leads with, and what the web archive kept a year ago is the same page.
+        const siteUrl = rival.website ? homeOf(rival.website) : null;
+        const reading = siteUrl ? readSite(siteUrl).catch(() => ({ text: "", tags: [], html: null })) : Promise.resolve({ text: "", tags: [], html: null });
+        // Its site beyond the home page (Tag Manager, robots.txt, sitemaps, a year ago), while the libraries are read.
+        const checking = reading.then((s) =>
+          within(
+            checkSite({ url: siteUrl, html: s.html, service: c.service, googlePhone: rival.phone, now }),
+            Math.max(20_000, Math.min(75_000, left(c) - 30_000)),
+            siteSummary({ url: siteUrl, html: s.html, service: c.service, googlePhone: rival.phone, now }),
+          ),
+        );
+        const [site, meta, google, check] = await Promise.all([
+          reading,
           metaFor(c, rival, spare).catch(() => ({ read: false, ads: [], total: 0, url: metaSearchUrl(searchName(rival.name)) })),
           googleFor(c, rival).catch(() => ({ read: false, ads: [], total: 0, more: false, host: siteHost(rival.website) })),
+          checking,
         ]);
-        c.log(`  ${rival.name}: ${meta.read ? `${meta.total} Facebook/Instagram ads` : "Facebook/Instagram not read"}, ${google.read ? `${google.total}${google.more ? "+" : ""} Google ads` : "Google not read"}`);
-        return { rival, site, meta, google };
+        c.log(`  ${rival.name}: ${meta.read ? `${meta.total} Facebook/Instagram ads` : "Facebook/Instagram not read"}, ${google.read ? `${google.total}${google.more ? "+" : ""} Google ads` : "Google not read"}${check?.read ? `, site read${check.pages ? ` (${check.pages.total} pages)` : ""}` : rival.website ? ", site didn't open" : ""}`);
+        return { rival, site, meta, google, check };
       }),
   );
 
@@ -188,6 +221,7 @@ export async function spyOnAds(c, rivals) {
   const facts = {};
   const sites = {};
   const homes = {};
+  const checks = {};
   const copies = [];
   const videoCopies = [];
 
@@ -195,6 +229,7 @@ export async function spyOnAds(c, rivals) {
     const { rival } = f;
     if (f.site.text) sites[rival.id] = f.site.text;
     if (f.site.html) homes[rival.id] = f.site.html;
+    if (f.check) checks[rival.id] = f.check;
     const unread = [];
     if (!f.meta.read) unread.push("meta");
     if (!f.google.read) unread.push("google");
@@ -202,7 +237,8 @@ export async function spyOnAds(c, rivals) {
       meta: f.meta.total,
       google: f.google.total,
       googleMore: f.google.more,
-      tracking: f.site.tags,
+      // Ad pixels in the page's own code and inside its Tag Manager containers.
+      tracking: f.check?.read ? f.check.stack.filter((t) => t.group === "ads").map((t) => t.name) : f.site.tags,
       metaUrl: f.meta.url,
       googleUrl: f.google.host ? googleDomainUrl(f.google.host) : null,
       unread,
@@ -264,6 +300,7 @@ export async function spyOnAds(c, rivals) {
   for (const [id, first] of sameAs) {
     if (facts[first]) facts[id] = { ...facts[first], sameAs: first };
     if (sites[first]) sites[id] = sites[first];
+    if (checks[first]) checks[id] = checks[first];
   }
 
   c.log(`  saving ${copies.length} pictures and up to ${videoCopies.length} videos (the libraries' links expire within hours)`);
@@ -280,5 +317,5 @@ export async function spyOnAds(c, rivals) {
   });
   const sheets = await readGoogleAdWords(c, shown);
   const kept = shown.filter((a) => !sheets.has(a.id));
-  return { ads: kept, facts, sites, homes };
+  return { ads: kept, facts, sites, homes, checks };
 }

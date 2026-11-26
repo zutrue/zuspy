@@ -5,6 +5,9 @@ import { join } from "node:path";
 import { adTotals, MARKET, searchName } from "../rules/spy.mjs";
 import { ctaBlock, esc, footer, heading, iconUrl, logoDataUrl, plural, safeUrl, scriptJson, STYLES, TOC_SCRIPT, topbar } from "./html-kit.mjs";
 import { ZUOPS_URL } from "../config.mjs";
+import { CHANNELS } from "../rules/scorecard.mjs";
+import { SOCIAL_LABEL } from "../rules/site.mjs";
+import { changesSection, nextSteps, planSection, scorecardSection, SECTION_STYLES, sitesSection, topBlock, unknownsSection } from "./sections.mjs";
 
 const LONG_DAYS = 60;
 const CHANNEL = { meta: "Facebook & Instagram", google: "Google" };
@@ -19,7 +22,7 @@ const monthYear = (iso) => (iso ? new Date(iso).toLocaleDateString("en-US", { mo
 const num = (n) => Number(n).toLocaleString("en-US");
 
 const GENERIC = new Set(
-  "a an and the of at by in on for to all best local pro pros family quality affordable american national united premier elite top first 24 hour hours garage garages door doors gate gates repair repairs service services company co llc inc corp group roof roofs roofing plumbing plumber plumbers hvac heating cooling air ac med medical spa spas wellness aesthetics dental dentist electric electrical pest control lawn landscaping cleaning carpet pool pools solar home homes house painting window windows auto towing moving movers"
+  "a an and the of at by in on for to all best local pro pros family quality affordable american national united premier elite top first 24 hour hours same day next fast quick speedy rapid express right away reliable honest trusted professional professionals licensed certified insured master superior quality expert experts water heater heaters sewer drain drains emergency garage garages door doors gate gates repair repairs service services company co llc inc corp group roof roofs roofing plumbing plumber plumbers hvac heating cooling air ac med medical spa spas wellness aesthetics dental dentist electric electrical pest control lawn landscaping cleaning carpet pool pools solar home homes house painting window windows auto towing moving movers"
     .split(" "),
 );
 const PLACES = new Set(
@@ -31,11 +34,14 @@ const PLACES = new Set(
  * The ways a report's text may name a business: its full name, its name without a "| keywords" tail, its first two
  * words, and its first word when that word is its own ("A1", "Precision", "Darcy"), never a trade word or a place.
  */
-export function nameAliases(name) {
+export function nameAliases(name, { strict = false } = {}) {
   const base = searchName(String(name ?? ""));
   const words = base.split(/\s+/).filter(Boolean);
   const out = new Set([String(name ?? "").trim(), base]);
-  if (words.length >= 3) out.add(words.slice(0, 2).join(" ").replace(/[,.]$/, ""));
+  // Its first two words. For a business that only shows in its own card (strict), not when both are words anyone may
+  // write: "Same Day" Water Heater Pros mustn't swap out a "Same Day" offer.
+  const two = words.slice(0, 2).map((w) => w.replace(/[,.]$/, ""));
+  if (words.length >= 3 && (!strict || two.some((w) => !GENERIC.has(w.toLowerCase().replace(/[’']s$/, ""))))) out.add(two.join(" "));
   const first = (words[0] ?? "").replace(/[’']s$/i, "").replace(/[^A-Za-z0-9&]/g, "");
   if (first && words.length > 1 && !GENERIC.has(first.toLowerCase()) && !PLACES.has(first.toLowerCase()) && (first.length >= 3 || /\d/.test(first))) out.add(first);
   return [...out].filter((a) => a.length >= 2);
@@ -56,7 +62,10 @@ export function anonymize(report) {
   for (const a of res.rivalAds ?? []) {
     if (a.rival === MARKET && a.advertiser && !market.has(a.advertiser)) market.set(a.advertiser, `Another business ${market.size + 1}`);
   }
-  for (const [n, to] of market) for (const alias of nameAliases(n)) swaps.push([alias, to]);
+  for (const b of res.top?.businesses ?? []) {
+    if (!b.rival && !market.has(b.name)) market.set(b.name, `Another business ${market.size + 1}`);
+  }
+  for (const [n, to] of market) for (const alias of nameAliases(n, { strict: true })) swaps.push([alias, to]);
   if (r.input.business) for (const alias of nameAliases(r.input.business)) swaps.push([alias, "your business"]);
   swaps.sort((a, b) => b[0].length - a[0].length);
   const patterns = swaps.map(([from, to]) => {
@@ -90,6 +99,16 @@ export function anonymize(report) {
     a.youtubeId = null;
   }
   for (const t of r.result.themes) for (const q of t.quotes) q.rivalName = names.get(q.rival) ?? q.rivalName;
+  for (const b of r.result.top?.businesses ?? []) b.name = b.rival ? names.get(b.rival) ?? b.name : market.get(res.top.businesses.find((x) => x.position === b.position)?.name) ?? b.name;
+  for (const s of Object.values(r.result.sites ?? {})) {
+    s.url = null;
+    s.gtm = [];
+    s.phones = [];
+    if (s.yearAgo) s.yearAgo.link = null;
+    // Which networks they're on stays; the links (their handles) go.
+    s.socials = (s.socials ?? []).map((x) => ({ network: x.network, url: null }));
+  }
+  if (r.result.changes) r.result.changes.folder = null;
   if (r.input.business) r.input.business = "your business";
   // Which service ran the AI is the reader's own business: the model is enough.
   if (typeof r.ai === "string") r.ai = r.ai.replace(/\s*\(.*\)\s*$/, "");
@@ -204,9 +223,7 @@ export function reportHtml(report) {
     ["weak", "Reviews read", `${num(res.readReviews)}`, res.readReviews ? `${num(res.lowReviews)} of them 3★ or lower` : "reviews were skipped"],
   ];
 
-  const moves = (res.adMoves ?? [])
-    .map((m) => `<li><span>${esc(m.move)}${m.adId && allAds.some((a) => a.id === m.adId) ? ` <a href="#ads" data-show="${esc(m.adId)}">See the ad →</a>` : ""}</span></li>`)
-    .join("");
+  const ctx = { ads: allAds, byId };
 
   const rivalChips = res.rivals
     .filter((r) => theirs.some((a) => a.rival === r.id))
@@ -267,13 +284,17 @@ export function reportHtml(report) {
   );
 
   const sections = [
-    ["short", "The short version"],
+    ["short", "Short version"],
+    ...(res.changes ? [["changes", "What changed"]] : []),
+    ...(res.card?.rows?.length ? [["engines", "How they get customers"]] : []),
     ["ads", "Their ads"],
-    ["rivals", "Who you're up against"],
+    ["rivals", "Competitors"],
+    ...(Object.keys(res.sites ?? {}).length ? [["sites", "Websites"]] : []),
     ...(res.themes.length ? [["weak", "Weak spots"]] : []),
     ...(res.ads.length ? [["win", "Ads that win"]] : []),
     ...(res.offers.length ? [["offers", "Offers"]] : []),
-    ["how", "How it's made"],
+    ...(res.plan?.length ? [["plan", "30-day plan"]] : []),
+    ...(res.unknowns?.length ? [["unknowns", "Couldn't see"]] : []),
   ];
 
   const filters = theirs.length
@@ -293,7 +314,7 @@ export function reportHtml(report) {
 <meta name="robots" content="noindex">
 <title>${esc(title)} · ZuSpy competitor report</title>
 <link rel="icon" href="${logoDataUrl()}">
-<style>${STYLES}</style>
+<style>${STYLES}${SECTION_STYLES}</style>
 </head>
 <body${report.anonymous ? ' class="anon"' : ""}>
 ${topbar(sections)}
@@ -315,14 +336,19 @@ ${topbar(sections)}
     ${res.summary ? `<p class="big">${esc(res.summary)}</p>` : ""}
     ${res.theirAds ? `<p class="ads-line">${esc(res.theirAds)}</p>` : ""}
   </div>
-  ${moves ? `<div><h3>Do this next</h3><ol class="moves">${moves}</ol></div>` : ""}
+  ${nextSteps(res, ctx)}
 </section>
+
+${changesSection(res, ctx)}
+
+${scorecardSection(res, ctx)}
 
 <section id="ads">
   ${heading("Their ads", "ads")}
   <p class="lead">Running right now, from Meta's Ad Library and Google's Ads Transparency Center. Facebook and Instagram first, then Google, the longest running first: nobody keeps paying for an ad that doesn't work. Click any ad to see it big.${unreadMeta ? " Some Facebook and Instagram searches couldn't be read this time; the table below says which." : ""}</p>
   ${filters}
   ${theirs.length ? `<div class="grid ads" id="ad-grid">${theirs.map((a, i) => adCard(a, byId, i)).join("")}</div>` : `<div class="card empty">None of these competitors has an ad up on Facebook, Instagram or Google right now${unreadMeta ? " (some libraries couldn't be read this time)" : ""}. That's room for you.</div>`}
+  ${topBlock(res, ctx, input)}
   ${market.length ? `<h3 class="subhead">Others in this market</h3><p class="lead">Businesses in the trade advertising on Facebook and Instagram for this search that aren't in the Maps top ${res.rivals.length}.</p><div class="grid ads">${market.map((a, i) => adCard(a, byId, i)).join("")}</div>` : ""}
 </section>
 
@@ -334,6 +360,8 @@ ${topbar(sections)}
     ${res.rivals.map((rv) => rivalRow(rv, byId)).join("")}
   </div>
 </section>
+
+${sitesSection(res, ctx)}
 
 ${
     res.themes.length
@@ -350,13 +378,20 @@ ${res.ads.length ? `<section id="win">${heading("Ads that win their customers", 
 
 ${res.offers.length ? `<section id="offers">${heading("Offers to test", "offers")}<p class="lead">Built to take away the fear their customers wrote about.</p><div class="grid offers">${offers}</div></section>` : ""}
 
+${planSection(res, ctx)}
+
+${unknownsSection(res)}
+
 <section id="how" class="card how">
   <h2>How this was made</h2>
   <div class="it"><span><b>Competitors:</b> a live Google Maps search for “${esc(input.service)} ${esc(input.location)}”, ads${input.business ? " and your own listing" : ""} left out.</span></div>
   <div class="it"><span><b>Ads:</b> Meta's Ad Library (${esc(report.meta_reader === "firecrawl" ? "read through Firecrawl" : report.meta_reader === "none" || report.meta_reader === "off" ? "skipped this time" : "read in a browser")}) and Google's Ads Transparency Center. Pictures and videos are saved with the report because the libraries' links expire.</span></div>
   ${res.readReviews ? `<div class="it"><span><b>Reviews:</b> each competitor's 30 lowest-rated and 10 most relevant Google reviews.</span></div>` : ""}
+  ${Object.keys(res.sites ?? {}).length ? `<div class="it"><span><b>Websites:</b> each home page, the Google Tag Manager containers it loads, robots.txt and llms.txt, its sitemaps, and its home page about a year ago in the web archive.</span></div>` : ""}
+  ${res.top ? `<div class="it"><span><b>Top of Google:</b> one live Google search on a phone in the town, for Local Services Ads.</span></div>` : ""}
+  ${res.card ? `<div class="it"><span><b>How each one gets customers:</b> scored by code from what was seen, never by the AI.</span></div>` : ""}
   <div class="it"><span><b>Analysis:</b> ${esc(report.ai ?? "an AI")}, then checked by code: counts come from the reviews it cites, quotes are rebuilt from the reviews' own sentences, and anything naming a competitor is dropped.</span></div>
-  <div class="it"><span><b>What nobody can see from outside:</b> ad spend and results (only how long an ad has run), TikTok ads (no public library for US advertisers), and ads run under a page name that doesn't match.</span></div>
+  <div class="it"><span><b>What nobody can see from outside:</b> ad spend and results (only how long an ad has run), TikTok and Nextdoor ads (no public libraries), and ads run under a page name that doesn't match.${res.unknowns?.length ? ` <a href="#unknowns">The full list →</a>` : ""}</span></div>
   ${report.cost ? `<div class="it"><span><b>Cost of this report:</b> ${esc(costText(report.cost))}.</span></div>` : ""}
 </section>
 
@@ -462,7 +497,8 @@ export function costText(cost) {
   if (cost.ai_tokens && Object.keys(cost.ai_tokens).length) {
     const tokens = Object.entries(cost.ai_tokens).map(([m, t]) => `${m} ${Math.round((t.input + t.output) / 1000)}k tokens`).join(", ");
     parts.push(cost.ai_usd_at_list_price == null ? tokens : `AI $${Number(cost.ai_usd_at_list_price).toFixed(3)} at Anthropic's list price (${tokens})`);
-  } else parts.push("AI: your Claude Code plan");
+  } else if (cost.ai_plan_tokens) parts.push(`AI: ${Math.round((cost.ai_plan_tokens.input + cost.ai_plan_tokens.output) / 1000)}k tokens on your Claude plan`);
+  else parts.push("AI: your Claude Code plan");
   if (cost.firecrawl_credits) parts.push(`${cost.firecrawl_credits} Firecrawl credits`);
   return parts.join(" · ");
 }
@@ -479,6 +515,25 @@ export function reportMarkdown(report) {
   if (res.theirAds) L.push(res.theirAds, "");
   for (const m of res.adMoves ?? []) L.push(`- ${m.move}${m.adId ? ` (ad ${m.adId})` : ""}`);
   if (res.adMoves?.length) L.push("");
+  if (res.changes) {
+    const since = new Date(res.changes.since).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    L.push(`## Since your last report (${since})`, "");
+    if (!res.changes.items.length) L.push("Nothing changed in this market since then.");
+    for (const c of res.changes.items) L.push(`- ${c.rival ? `**${md(byId.get(c.rival)?.name)}**: ` : ""}${md(c.text)}`);
+    L.push("");
+  }
+  if (res.card?.rows?.length) {
+    L.push("## How each one gets customers", "", "Scored by code from what was seen; ? = couldn't check this time.", "");
+    L.push(`| Competitor | ${CHANNELS.map(([, label]) => label).join(" | ")} |`);
+    L.push(`|---|${CHANNELS.map(() => "---").join("|")}|`);
+    for (const row of res.card.rows) {
+      const rv = byId.get(row.id);
+      L.push(`| ${rv?.rank}. ${md(rv?.name)} | ${CHANNELS.map(([key]) => { const c = row.cells[key]; return md(c.state === "unknown" ? `? ${c.text}` : `${"●".repeat(c.dots)}${"○".repeat(3 - c.dots)} ${c.text}`); }).join(" | ")} |`);
+    }
+    L.push("");
+    for (const rv of res.rivals) if (rv.engine) L.push(`- **${md(rv.name)}:** ${md(rv.engine)}`);
+    if (res.rivals.some((rv) => rv.engine)) L.push("");
+  }
   L.push("## Who you're up against", "");
   L.push("| # | Business | Rating | Facebook & Instagram ads | Google ads | Ads lead with |");
   L.push("|---|---|---|---|---|---|");
@@ -497,6 +552,29 @@ export function reportMarkdown(report) {
     }
     L.push("");
   }
+  if (res.top?.shown) {
+    L.push(`## Paying for the very top of Google (Local Services Ads, “${md(res.top.search)}”)`, "");
+    for (const b of res.top.businesses) L.push(`${b.position}. **${md(b.name)}**${b.rival ? ` (#${byId.get(b.rival)?.rank} on Maps)` : ""} · ${b.rating ?? "?"}★, ${b.reviews ?? "?"} reviews${b.years ? `, ${b.years}+ years` : ""}${b.badges?.length ? ` · ${b.badges.map(md).join(", ")}` : ""}`);
+    L.push("");
+  }
+  const siteList = res.rivals.filter((rv) => res.sites?.[rv.id]?.read && !rv.adFacts?.sameAs);
+  if (siteList.length) {
+    L.push("## Their websites", "");
+    for (const rv of siteList) {
+      const s = res.sites[rv.id];
+      L.push(`### ${rv.rank}. ${md(rv.name)}`, "");
+      if (s.headline || s.title) L.push(`- **Leads with:** ${md(s.headline ?? s.title)}`);
+      if (s.yearAgo) L.push(`- **A year ago (${s.yearAgo.month}):** ${s.yearAgo.changed ? md(s.yearAgo.headline) : "the same headline"}${s.yearAgo.offers?.length ? `; offers then: ${s.yearAgo.offers.map(md).join(", ")}` : ""}`);
+      if (s.offers.length) L.push(`- **Offers:** ${s.offers.map(md).join(" · ")}`);
+      const tools = s.stack.filter((t) => t.group !== "builder");
+      if (tools.length) L.push(`- **Tools:** ${tools.map((t) => `${md(t.name)}${t.hidden ? " (in Tag Manager)" : ""}`).join(", ")}`);
+      if (s.pages) L.push(`- **Pages:** ${s.pages.total} pages, ${s.pages.towns.count} town pages, ${s.pages.blog.posts} posts (${s.pages.blog.fresh90} updated in 90 days)`);
+      if (s.ai?.read) L.push(`- **AI assistants:** ${s.ai.answersBlocked ? `blocks ${s.ai.blocked.join(", ")}` : s.ai.blocked.length ? `answers open; blocks ${s.ai.blocked.join(", ")}` : "open to all"}${s.ai.llms ? "; has an llms.txt" : ""}`);
+      if (s.socials.length) L.push(`- **Profiles:** ${s.socials.map((x) => (x.url ? `[${SOCIAL_LABEL[x.network] ?? x.network}](${x.url})` : SOCIAL_LABEL[x.network] ?? x.network)).join(", ")}`);
+      if (s.phoneNote) L.push(`- **Phone:** site ${s.phoneNote.site}, Google ${s.phoneNote.google} (likely call tracking)`);
+      L.push("");
+    }
+  }
   if (res.themes.length) {
     L.push("## Their weak spots", "");
     for (const t of res.themes) {
@@ -512,6 +590,21 @@ export function reportMarkdown(report) {
   if (res.offers.length) {
     L.push("## Offers to test", "");
     for (const o of res.offers) L.push(`- **${o.offer}**: ${o.why}${o.needs ? ` (only if ${onlyIf(o.needs)})` : ""}`);
+    L.push("");
+  }
+  if (res.plan?.length) {
+    L.push("## Your next 30 days", "");
+    for (const w of [1, 2, 3, 4]) {
+      const steps = res.plan.filter((p) => p.week === w);
+      if (!steps.length) continue;
+      L.push(`**Week ${w}**`, "");
+      for (const p of steps) L.push(`- ${md(p.step)}`);
+      L.push("");
+    }
+  }
+  if (res.unknowns?.length) {
+    L.push("## What ZuSpy couldn't see", "");
+    for (const u of res.unknowns) L.push(`- **${md(u.what)}:** ${md(u.why)}${u.how ? ` ${md(u.how)}` : ""}${u.check ? ` [Check it](${u.check})` : ""}`);
     L.push("");
   }
   L.push("---", "", `Want this with one click, no API keys, and a weekly check on what changed? [Competitor Spy on Zuops](${ZUOPS_URL}).`, "");

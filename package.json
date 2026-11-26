@@ -1,6 +1,6 @@
 {
   "name": "zuspy",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Spy on your local competitors: who beats you on Google Maps, every ad they're running on Facebook, Instagram and Google right now, what their customers complain about, and the ads and offers that win those customers. Then keep watching them. Bring your own API keys, or run it inside Claude Code.",
   "type": "module",
   "bin": {

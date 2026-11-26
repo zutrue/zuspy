@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findClaude } from "./providers/claude-cli.mjs";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
@@ -73,7 +74,8 @@ export const browserPath = () => env("ZUSPY_BROWSER");
  * Which AI writes the report.
  *  - anthropic: ANTHROPIC_API_KEY (Claude through the official SDK; ANTHROPIC_BASE_URL is respected)
  *  - openai:    any OpenAI-compatible API: ZUSPY_AI_BASE_URL + ZUSPY_AI_KEY (OpenRouter, Zurelay, OpenAI, a local model ...)
- *  - claude-code: no key; ZuSpy writes the prompt and Claude Code (your subscription) writes the analysis
+ *  - claude-cli: no key; your installed `claude` command writes it, headless, on your Claude plan
+ *  - claude-code: no key; ZuSpy writes the prompt and Claude Code (or any AI you paste it into) writes the analysis
  */
 export function aiConfig(forced) {
   const pick = (forced ?? env("ZUSPY_AI") ?? "").toLowerCase();
@@ -107,13 +109,17 @@ export function aiConfig(forced) {
     }
     return { engine: "openai", key: null, baseURL: only ? presets[0]?.[2] ?? null : null, model: env("ZUSPY_MODEL"), readerModel: null, effort };
   };
+  const cli = () => ({ engine: "claude-cli", bin: findClaude(process.env), model: env("ZUSPY_MODEL") ?? "sonnet", effort });
   if (pick === "anthropic") return anthropic();
   if (pick === "openrouter" || pick === "zurelay") return openai(pick);
   if (pick === "openai") return openai();
-  if (pick === "claude-code" || pick === "claude") return { engine: "claude-code" };
+  // "claude-code": Claude Code writes it, headless when its command is installed, else from prompt.md.
+  if (pick === "claude-cli" || ((pick === "claude-code" || pick === "claude") && findClaude(process.env))) return cli();
+  if (pick === "claude-code" || pick === "claude" || pick === "manual" || pick === "prompt") return { engine: "claude-code" };
   if (env("ANTHROPIC_API_KEY")) return anthropic();
   const o = openai();
   if (o.key && o.baseURL) return o;
+  if (findClaude(process.env)) return cli();
   return { engine: "claude-code" };
 }
 

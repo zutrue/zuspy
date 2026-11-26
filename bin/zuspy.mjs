@@ -18,9 +18,11 @@ const HELP = `ZuSpy ${VERSION}: spy on your local competitors.
       Opens a page in your browser to paste and test your API keys. They're saved in a private file in your
       user folder (${keysFile()}), never in a chat or a project.
 
-  zuspy spy "<what you sell>" "<town, ST>" [--me "<your business>"] [--rivals 5] [--no-reviews] [--ai anthropic|openai|claude-code] [--open]
-      Who beats you on Google Maps, every ad they're running on Facebook, Instagram and Google, what their
-      customers complain about, and the ads and offers that win those customers. About 3-5 minutes.
+  zuspy spy "<what you sell>" "<town, ST>" [--me "<your business>"] [--rivals 5] [--no-reviews] [--ai anthropic|openai|claude-cli|manual] [--open]
+      Who beats you on Google Maps and how each one gets customers: every ad they're running on Facebook,
+      Instagram and Google, who pays for the top of Google, their websites (pixels hidden in Google Tag Manager,
+      town pages, a year ago), what their customers complain about, the ads and offers that win those customers,
+      and a 30-day plan. Run it again later on the same market to see what changed. About 2-5 minutes.
 
   zuspy watch <their website> [--name "<their business name>"] [--town "<town, ST>"] [--open]
       Check one company now, and again later: their ads, offers, website, pages, jobs and Google listing.
@@ -29,7 +31,7 @@ const HELP = `ZuSpy ${VERSION}: spy on your local competitors.
   zuspy watch --all           check every company you watch (run it weekly from cron or Task Scheduler)
   zuspy watch --remove <host> stop watching one
 
-  zuspy finish <report folder>   turn Claude Code's analysis.json into the report (when no AI key is set)
+  zuspy finish <report folder>   turn an analysis.json you wrote from prompt.md into the report
   zuspy rebuild <report folder> [--anonymous]   draw report.html again; --anonymous hides every business name
   zuspy list                     your reports
   zuspy open <report folder>     open a report in your browser
@@ -89,7 +91,8 @@ async function doctor() {
   const meta = metaReader();
   console.log(`${ok(meta.how !== "none" && meta.how !== "off")} Facebook & Instagram ads: ${meta.detail}`);
   const ai = aiConfig();
-  if (ai.engine === "claude-code") console.log(`OK  AI: no API key set, so Claude Code writes the analysis${inClaudeCode() ? " (you're in Claude Code)" : " (run ZuSpy from Claude Code, or set ANTHROPIC_API_KEY)"}`);
+  if (ai.engine === "claude-cli") console.log(`OK  AI: no API key set, so Claude Code writes the analysis on your Claude plan (${ai.bin}, model ${ai.model}). It must be signed in: run \`claude\` once if it isn't.`);
+  else if (ai.engine === "claude-code") console.log(`OK  AI: no API key and no \`claude\` command found, so ZuSpy writes prompt.md for Claude Code to answer${inClaudeCode() ? " (you're in Claude Code)" : " (run ZuSpy from Claude Code, install Claude Code, or set ANTHROPIC_API_KEY)"}`);
   else console.log(`${ok(!!ai.key && !!ai.model)} AI: ${ai.engine === "anthropic" ? "Anthropic API" : ai.baseURL} · ${ai.model} (reads ad pictures with ${ai.readerModel}) · effort ${ai.effort}`);
   if (!firecrawlKey() && meta.how === "browser") console.log("    (optional) FIRECRAWL_API_KEY as a backup reader for the Ad Library");
   console.log(`\nReports go to ${reportsDir()}`);
