@@ -69,7 +69,7 @@ h2{font-size:26px;line-height:1.15;letter-spacing:-.025em;margin:0;font-weight:8
 .ad .media{position:relative;aspect-ratio:1/1;background:#EEF1F5;overflow:hidden}
 .ad .media img,.ad .media video{width:100%;height:100%;object-fit:cover;display:block}
 .ad .media.shot{background:#fff;border-bottom:1px solid var(--line)}
-.ad .media.shot img{object-fit:contain;object-position:top center;padding:10px}
+.ad .media.shot img{object-fit:contain;object-position:top center;padding:46px 12px 12px}
 .ad .media.words{display:flex;flex-direction:column;justify-content:center;gap:8px;padding:22px;background:#F7F9FC}
 .ad .media.words .hl{font-size:17px;font-weight:700;color:var(--blue-ink);line-height:1.3}
 .ad .media.words .tx{font-size:14px;color:var(--ink-2);-webkit-line-clamp:6}
